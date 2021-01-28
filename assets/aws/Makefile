@@ -86,6 +86,19 @@ ent: check-vars
 	packer build -force -var build_timestamp=$(BUILD_TIMESTAMP) -only teleport-aws-linux -var destination_regions=$(AWS_REGION) single-ami.json
 	@echo "$(BUILD_TIMESTAMP)" > files/build/ent_build_timestamp.txt
 
+# Build Cloud 'debug' AMI (with Kubernetes support)
+# To share Cloud AMI after building, run:
+# aws ec2 modify-image-attribute --region us-west-2 --image-id <ami ID> --launch-permission "Add=[{UserId=883474662888},{UserId=619839468453}]"
+.PHONY: ent-cloud
+ent-cloud: TELEPORT_TYPE=ent
+ent-cloud: PUBLIC_AMI_NAME=gravitational-teleport-ami-ent-$(TELEPORT_VERSION)-cloud
+ent-cloud: check-vars
+	@echo "Building image $(TELEPORT_VERSION) $(TELEPORT_TYPE)"
+	@echo "BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
+	mkdir -p files/build
+	packer build -force -var ami_name=$(PUBLIC_AMI_NAME) -var build_timestamp=$(BUILD_TIMESTAMP) -only teleport-aws-linux -var destination_regions=$(AWS_REGION) single-ami.json
+	@echo "$(BUILD_TIMESTAMP)" > files/build/ent_build_timestamp.txt
+
 # Build named 'production' AMI and marketplace version
 .PHONY: ent-ci-build
 ent-ci-build: TELEPORT_TYPE=ent
