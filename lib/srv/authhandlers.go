@@ -374,39 +374,29 @@ func (h *AuthHandlers) canLoginWithRBAC(cert *ssh.Certificate, clusterName strin
 
 // fetchRoleSet fetches the services.RoleSet assigned to a Teleport user.
 func (h *AuthHandlers) fetchRoleSet(cert *ssh.Certificate, ca services.CertAuthority, teleportUser string, clusterName string) (services.RoleSet, error) {
+	// Extract roles and traits either from the certificate or from
+	// services.User and create a services.RoleSet with all runtime roles.
+	roles, traits, err := services.ExtractFromCertificate(h.AccessPoint, cert)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
 	// for local users, go and check their individual permissions
 	var roleset services.RoleSet
 	if clusterName == ca.GetClusterName() {
-		// Extract roles and traits either from the certificate or from
-		// services.User and create a services.RoleSet with all runtime roles.
-		roles, traits, err := services.ExtractFromCertificate(h.AccessPoint, cert)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
 		roleset, err = services.FetchRoles(roles, h.AccessPoint, traits)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
 	} else {
-		roles, err := extractRolesFromCert(cert)
-		if err != nil {
-			return nil, trace.AccessDenied("failed to parse certificate roles")
-		}
 		roleNames, err := services.MapRoles(ca.CombinedMapping(), roles)
 		if err != nil {
 			return nil, trace.AccessDenied("failed to map roles")
-		}
-		// Pass the principals on the certificate along as the login traits
-		// to the remote cluster.
-		traits := map[string][]string{
-			teleport.TraitLogins: cert.ValidPrincipals,
 		}
 		roleset, err = services.FetchRoles(roleNames, h.AccessPoint, traits)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
 	}
-
 	return roleset, nil
 }
 
@@ -459,14 +449,4 @@ func (h *AuthHandlers) authorityForCert(caType services.CertAuthType, key ssh.Pu
 // isProxy returns true if it's a regular SSH proxy.
 func (h *AuthHandlers) isProxy() bool {
 	return h.Component == teleport.ComponentProxy
-}
-
-// extractRolesFromCert extracts roles from certificate metadata extensions.
-func extractRolesFromCert(cert *ssh.Certificate) ([]string, error) {
-	data, ok := cert.Extensions[teleport.CertExtensionTeleportRoles]
-	if !ok {
-		// it's ok to not have any roles in the metadata
-		return nil, nil
-	}
-	return services.UnmarshalCertRoles(data)
 }

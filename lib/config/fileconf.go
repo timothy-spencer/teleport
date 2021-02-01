@@ -183,6 +183,7 @@ var (
 		"insecure_skip_verify":    false,
 		"rewrite":                 false,
 		"redirect":                false,
+		"headers":                 false,
 		"debug_app":               false,
 		"acme":                    true,
 		"email":                   false,
@@ -1000,6 +1001,8 @@ type App struct {
 type Rewrite struct {
 	// Redirect is a list of hosts that should be rewritten to the public address.
 	Redirect []string `yaml:"redirect"`
+	// Headers is a list of extra headers to inject in the request.
+	Headers []string `yaml:"headers,omitempty"`
 }
 
 // Proxy is a `proxy_service` section of the config file:
