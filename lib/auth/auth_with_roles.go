@@ -1801,6 +1801,14 @@ func (a *ServerWithRoles) SearchSessionEvents(from, to time.Time, limit int) ([]
 	return a.alog.SearchSessionEvents(from, to, limit)
 }
 
+func (l *ServerWithRoles) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]events.EventFields, string, error) {
+	return nil, "", nil
+}
+
+func (l *ServerWithRoles) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) ([]events.EventFields, string, error) {
+	return nil, "", nil
+}
+
 // GetNamespaces returns a list of namespaces
 func (a *ServerWithRoles) GetNamespaces() ([]services.Namespace, error) {
 	if err := a.action(defaults.Namespace, services.KindNamespace, services.VerbList); err != nil {

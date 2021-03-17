@@ -1737,6 +1737,14 @@ func (c *Client) SearchSessionEvents(from, to time.Time, limit int) ([]events.Ev
 	return retval, nil
 }
 
+func (l *Client) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]events.EventFields, string, error) {
+	return nil, "", nil
+}
+
+func (l *Client) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) ([]events.EventFields, string, error) {
+	return nil, "", nil
+}
+
 // GetNamespaces returns a list of namespaces
 func (c *Client) GetNamespaces() ([]services.Namespace, error) {
 	out, err := c.Get(c.Endpoint("namespaces"), url.Values{})

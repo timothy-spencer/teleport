@@ -155,3 +155,11 @@ func (m *MultiLog) SearchSessionEvents(fromUTC, toUTC time.Time, limit int) (eve
 	}
 	return events, err
 }
+
+func (l *MultiLog) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
+	return nil, "", nil
+}
+
+func (l *MultiLog) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
+	return nil, "", nil
+}

@@ -119,7 +119,14 @@ func (w *WriterLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit i
 // find completed session.
 func (w *WriterLog) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int) ([]EventFields, error) {
 	return nil, trace.NotImplemented("not implemented")
+}
 
+func (l *WriterLog) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
+	return nil, "", trace.NotImplemented("not implemented")
+}
+
+func (l *WriterLog) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
+	return nil, "", trace.NotImplemented("not implemented")
 }
 
 // WaitForDelivery waits for resources to be released and outstanding requests to

@@ -57,7 +57,13 @@ func (d *DiscardAuditLog) SearchEvents(fromUTC, toUTC time.Time, query string, l
 func (d *DiscardAuditLog) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int) ([]EventFields, error) {
 	return make([]EventFields, 0), nil
 }
+func (l *DiscardAuditLog) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
+	return make([]EventFields, 0), "", nil
+}
 
+func (l *DiscardAuditLog) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
+	return make([]EventFields, 0), "", nil
+}
 func (d *DiscardAuditLog) UploadSessionRecording(SessionRecording) error {
 	return nil
 }
