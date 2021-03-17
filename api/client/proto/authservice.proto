@@ -785,6 +785,35 @@ message SingleUseUserCert {
     }
 }
 
+message GetEventsRequest {
+   // Namespace, if not set, defaults to 'default'
+   Namespace string
+   // Oldest date of returned events
+   StartDate Timestamp
+   // Newest date of returned events
+   EndDate Timestamp
+   // EventType is optional, if not set, returns all events
+   EventType string
+   // Maximum amount of events returned
+   Limit int64
+   // When supplied the search will resume from the last key
+   StartKey string
+}
+
+message GetSessionEventsRequest {
+   // SessionID is a required valid session ID
+   SessionID string
+   EventType string
+   Limit int64
+   StartKey string
+}
+
+message Events { 
+   Items repeated oneof Event
+   // the key of the last event if the returned set did not contain all events found i.e limit < actual amount. this is the key clients can supply in another API request to continue fetching events from the previous last position
+   LastKey string
+}
+
 // AuthService is authentication/authorization service implementation
 service AuthService {
     // SendKeepAlives allows node to send a stream of keep alive requests
@@ -961,4 +990,10 @@ service AuthService {
     // GetMFADevices returns all MFA devices registered for the user calling
     // this RPC.
     rpc GetMFADevices(GetMFADevicesRequest) returns (GetMFADevicesResponse);
+
+    // Out-of-session request for audit events.
+    rpc GetEvents(GetEventsRequest) returns (Events);
+
+    // In-session request for audit events.
+    rpc GetSessionEvents(GetSessionEventsRequest) returns (Events);
 }
