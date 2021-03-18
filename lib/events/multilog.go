@@ -134,24 +134,24 @@ func (m *MultiLog) GetSessionEvents(namespace string, sid session.ID, after int,
 //
 // The only mandatory requirement is a date range (UTC). Results must always
 // show up sorted by date (newest first)
-func (m *MultiLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit int) (events []EventFields, err error) {
+func (m *MultiLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit int, startKey string) (events []EventFields, lastKey string, err error) {
 	for _, log := range m.loggers {
-		events, err = log.SearchEvents(fromUTC, toUTC, query, limit)
+		events, lastKey, err := log.SearchEvents(fromUTC, toUTC, query, limit, startKey)
 		if !trace.IsNotImplemented(err) {
-			return events, err
+			return events, lastKey, err
 		}
 	}
-	return events, err
+	return events, lastKey, err
 }
 
 // SearchSessionEvents returns session related events only. This is used to
 // find completed session.
-func (m *MultiLog) SearchSessionEvents(fromUTC, toUTC time.Time, limit int) (events []EventFields, err error) {
+func (m *MultiLog) SearchSessionEvents(fromUTC, toUTC time.Time, limit int, startKey string) (events []EventFields, lastKey string, err error) {
 	for _, log := range m.loggers {
-		events, err = log.SearchSessionEvents(fromUTC, toUTC, limit)
+		events, lastKey, err = log.SearchSessionEvents(fromUTC, toUTC, limit, startKey)
 		if !trace.IsNotImplemented(err) {
-			return events, err
+			return events, lastKey, err
 		}
 	}
-	return events, err
+	return events, lastKey, err
 }
