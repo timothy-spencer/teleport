@@ -436,10 +436,6 @@ func (l *FileLog) findInFile(fn string, query url.Values, total *int, limit int,
 	retval := make([]EventFields, 0)
 	var lastKey string
 
-	if startKey == "" {
-		foundStart = true
-	}
-
 	eventFilter, ok := query[EventType]
 	if !ok && len(query) > 0 {
 		return nil, "", false, nil
