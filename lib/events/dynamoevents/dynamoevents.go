@@ -476,19 +476,27 @@ func (l *Log) GetSessionEvents(namespace string, sid session.ID, after int, inlc
 //
 // The only mandatory requirement is a date range (UTC). Results must always
 // show up sorted by date (newest first)
-func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int) ([]events.EventFields, error) {
+func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int, startKey string) ([]events.EventFields, string, error) {
+	var dResumeAt map[string]*dynamodb.AttributeValue
+
+	if startKey != "" {
+		err := json.Unmarshal([]byte(startKey), &dResumeAt)
+		if err != nil {
+			return nil, "", trace.BadParameter("failed to decode startKey")
+		}
+	}
+
 	g := l.WithFields(log.Fields{"From": fromUTC, "To": toUTC, "Filter": filter, "Limit": limit})
 	filterVals, err := url.ParseQuery(filter)
 	if err != nil {
-		return nil, trace.BadParameter("missing parameter query")
+		return nil, "", trace.BadParameter("missing parameter query")
 	}
 	eventFilter, ok := filterVals[events.EventType]
 	if !ok && len(filterVals) > 0 {
-		return nil, nil
+		return nil, "", nil
 	}
 	doFilter := len(eventFilter) > 0
 
-	var values []events.EventFields
 	query := "EventNamespace = :eventNamespace AND CreatedAt BETWEEN :start and :end"
 	attributes := map[string]interface{}{
 		":eventNamespace": defaults.Namespace,
@@ -497,22 +505,24 @@ func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int) (
 	}
 	attributeValues, err := dynamodbattribute.MarshalMap(attributes)
 	if err != nil {
-		return nil, trace.Wrap(err)
+		return nil, "", trace.Wrap(err)
 	}
 
-	var lastEvaluatedKey map[string]*dynamodb.AttributeValue
 	var total int
+	var values []events.EventFields
 
-	// Because the maximum size of the dynamo db response size is 900K according to documentation,
-	// we arbitrary limit the total size to 100MB to prevent runaway loops.
-	for pageCount := 0; pageCount < 100; pageCount++ {
+	fetch := func(resumeAt map[string]*dynamodb.AttributeValue, left int) (map[string]*dynamodb.AttributeValue, error) {
+		left64 := int64(left)
+		left64R := &left64
 		input := dynamodb.QueryInput{
 			KeyConditionExpression:    aws.String(query),
 			TableName:                 aws.String(l.Tablename),
 			ExpressionAttributeValues: attributeValues,
 			IndexName:                 aws.String(indexTimeSearch),
-			ExclusiveStartKey:         lastEvaluatedKey,
+			ExclusiveStartKey:         resumeAt,
+			Limit:                     left64R,
 		}
+
 		start := time.Now()
 		out, err := l.svc.Query(&input)
 		if err != nil {
@@ -546,30 +556,37 @@ func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int) (
 			}
 		}
 
-		// AWS returns a `lastEvaluatedKey` in case the response is truncated, i.e. needs to be fetched with
-		// multiple requests. According to their documentation, the final response is signaled by not setting
-		// this value - therefore we use it as our break condition.
-		lastEvaluatedKey = out.LastEvaluatedKey
-		if len(lastEvaluatedKey) == 0 {
-			sort.Sort(events.ByTimeAndIndex(values))
-			return values, nil
+		return out.LastEvaluatedKey, nil
+	}
+
+	for total < limit {
+		dResumeAt, err = fetch(dResumeAt, limit-total)
+		if err != nil {
+			return nil, "", trace.Wrap(err)
+		}
+		if len(dResumeAt) == 0 {
+			break
 		}
 	}
 
-	g.Error("DynamoDB response size exceeded limit.")
-	return values, nil
+	startKeyBytes, err := json.Marshal(&dResumeAt)
+	if err != nil {
+		return nil, "", trace.WrapWithMessage(err, "failed to encode lastKey")
+	}
+
+	return values, string(startKeyBytes), nil
 }
 
 // SearchSessionEvents returns session related events only. This is used to
 // find completed session.
-func (l *Log) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int) ([]events.EventFields, error) {
+func (l *Log) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int, startKey string) ([]events.EventFields, string, error) {
 	// only search for specific event types
 	query := url.Values{}
 	query[events.EventType] = []string{
 		events.SessionStartEvent,
 		events.SessionEndEvent,
 	}
-	return l.SearchEvents(fromUTC, toUTC, query.Encode(), limit)
+	return l.SearchEvents(fromUTC, toUTC, query.Encode(), limit, startKey)
 }
 
 // WaitForDelivery waits for resources to be released and outstanding requests to

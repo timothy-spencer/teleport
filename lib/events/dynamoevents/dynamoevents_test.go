@@ -97,7 +97,7 @@ func (s *DynamoeventsSuite) TestSessionEventsCRUD(c *check.C) {
 
 	time.Sleep(s.EventsSuite.QueryDelay)
 
-	history, err := s.Log.SearchEvents(s.Clock.Now().Add(-1*time.Hour), s.Clock.Now().Add(time.Hour), "", 0)
+	history, _, err := s.Log.SearchEvents(s.Clock.Now().Add(-1*time.Hour), s.Clock.Now().Add(time.Hour), "", 0, "")
 	c.Assert(err, check.IsNil)
 
 	// `check.HasLen` prints the entire array on failure, which pollutes the output
