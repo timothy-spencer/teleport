@@ -253,14 +253,6 @@ func (l *Forwarder) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limi
 	return l.ForwardTo.SearchSessionEvents(fromUTC, toUTC, limit)
 }
 
-func (l *Forwarder) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
-	return nil, "", nil
-}
-
-func (l *Forwarder) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
-	return nil, "", nil
-}
-
 // WaitForDelivery waits for resources to be released and outstanding requests to
 // complete after calling Close method
 func (l *Forwarder) WaitForDelivery(ctx context.Context) error {

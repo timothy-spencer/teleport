@@ -572,14 +572,6 @@ func (l *Log) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int)
 	return l.SearchEvents(fromUTC, toUTC, query.Encode(), limit)
 }
 
-func (l *Log) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]events.EventFields, string, error) {
-	return nil, "", nil
-}
-
-func (l *Log) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) ([]events.EventFields, string, error) {
-	return nil, "", nil
-}
-
 // WaitForDelivery waits for resources to be released and outstanding requests to
 // complete after calling Close method
 func (l *Log) WaitForDelivery(ctx context.Context) error {

@@ -1042,14 +1042,6 @@ func (l *AuditLog) SearchSessionEvents(fromUTC, toUTC time.Time, limit int) ([]E
 	return l.localLog.SearchSessionEvents(fromUTC, toUTC, limit)
 }
 
-func (l *AuditLog) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
-	return nil, "", nil
-}
-
-func (l *AuditLog) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
-	return nil, "", nil
-}
-
 // Closes the audit log, which inluces closing all file handles and releasing
 // all session loggers
 func (l *AuditLog) Close() error {
