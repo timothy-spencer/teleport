@@ -573,11 +573,11 @@ type IAuditLog interface {
 	//
 	// The only mandatory requirement is a date range (UTC). Results must always
 	// show up sorted by date (newest first)
-	SearchEvents(fromUTC, toUTC time.Time, query string, limit int) ([]EventFields, error)
+	SearchEvents(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error)
 
 	// SearchSessionEvents returns session related events only. This is used to
 	// find completed session.
-	SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int) ([]EventFields, error)
+	SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error)
 
 	// WaitForDelivery waits for resources to be released and outstanding requests to
 	// complete after calling Close method
