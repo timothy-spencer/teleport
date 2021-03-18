@@ -1891,6 +1891,14 @@ func (g *GRPCServer) authenticate(ctx context.Context) (*grpcContext, error) {
 	}, nil
 }
 
+func (g *GRPCServer) GetEvents(ctx context.Context, req *proto.GetEventsRequest) (*proto.Events, error) {
+	return nil, nil
+}
+
+func (g *GRPCServer) GetSessionEvents(ctx context.Context, req *proto.GetSessionEventsRequest) (*proto.Events, error) {
+	return nil, nil
+}
+
 // GRPCServerConfig specifies GRPC server configuration
 type GRPCServerConfig struct {
 	// APIConfig is GRPC server API configuration
