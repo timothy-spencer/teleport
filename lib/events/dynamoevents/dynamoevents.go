@@ -569,6 +569,7 @@ func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int, s
 		}
 	}
 
+	sort.Sort(events.ByTimeAndIndex(values))
 	startKeyBytes, err := json.Marshal(&dResumeAt)
 	if err != nil {
 		return nil, "", trace.WrapWithMessage(err, "failed to encode lastKey")
