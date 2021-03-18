@@ -486,7 +486,7 @@ func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int, s
 		}
 	}
 
-	g := l.WithFields(log.Fields{"From": fromUTC, "To": toUTC, "Filter": filter, "Limit": limit})
+	g := l.WithFields(log.Fields{"From": fromUTC, "To": toUTC, "Filter": filter, "Limit": limit, "StartKey": startKey})
 	filterVals, err := url.ParseQuery(filter)
 	if err != nil {
 		return nil, "", trace.BadParameter("missing parameter query")

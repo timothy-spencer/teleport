@@ -19,6 +19,7 @@ package firestoreevents
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"sort"
 	"strconv"
@@ -466,47 +467,63 @@ func (l *Log) GetSessionEvents(namespace string, sid session.ID, after int, inlc
 //
 // The only mandatory requirement is a date range (UTC). Results must always
 // show up sorted by date (newest first)
-func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int) ([]events.EventFields, error) {
-	g := l.WithFields(log.Fields{"From": fromUTC, "To": toUTC, "Filter": filter, "Limit": limit})
+func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int, startKey string) ([]events.EventFields, string, error) {
+	g := l.WithFields(log.Fields{"From": fromUTC, "To": toUTC, "Filter": filter, "Limit": limit, "StartKey": startKey})
 	filterVals, err := url.ParseQuery(filter)
 	if err != nil {
-		return nil, trace.BadParameter("missing or invalid parameter query in %q: %v", filter, err)
+		return nil, "", trace.BadParameter("missing or invalid parameter query in %q: %v", filter, err)
 	}
 	eventFilter, ok := filterVals[events.EventType]
 	if !ok && len(filterVals) > 0 {
-		return nil, nil
+		return nil, "", nil
 	}
 	doFilter := len(eventFilter) > 0
 
+	var lastKey int64
 	var values []events.EventFields
+	var parsedStartKey int64 = -1
+
+	if startKey != "" {
+		parsedStartKey, err = strconv.ParseInt(startKey, 10, 64)
+		if err != nil {
+			return nil, "", trace.BadParameter("failed to parse startKey, expected integer but found: %q", startKey, err)
+		}
+	}
+
+	modifyquery := func(query firestore.Query) firestore.Query {
+		if parsedStartKey > 0 {
+			return query.StartAt(parsedStartKey)
+		} else {
+			return query
+		}
+	}
 
 	start := time.Now()
-	docSnaps, err := l.svc.Collection(l.CollectionName).
+	docSnaps, err := modifyquery(l.svc.Collection(l.CollectionName).
 		Where(eventNamespaceDocProperty, "==", defaults.Namespace).
 		Where(createdAtDocProperty, ">=", fromUTC.Unix()).
 		Where(createdAtDocProperty, "<=", toUTC.Unix()).
-		OrderBy(createdAtDocProperty, firestore.Asc).
+		OrderBy(createdAtDocProperty, firestore.Asc)).
 		Limit(limit).
 		Documents(l.svcContext).GetAll()
 	batchReadLatencies.Observe(time.Since(start).Seconds())
 	batchReadRequests.Inc()
 	if err != nil {
-		return nil, firestorebk.ConvertGRPCError(err)
+		return nil, "", firestorebk.ConvertGRPCError(err)
 	}
 
 	g.WithFields(log.Fields{"duration": time.Since(start)}).Debugf("Query completed.")
 	for _, docSnap := range docSnaps {
-
 		var e event
 		err = docSnap.DataTo(&e)
 		if err != nil {
-			return nil, firestorebk.ConvertGRPCError(err)
+			return nil, "", firestorebk.ConvertGRPCError(err)
 		}
 
 		var fields events.EventFields
 		data := []byte(e.Fields)
 		if err := json.Unmarshal(data, &fields); err != nil {
-			return nil, trace.Errorf("failed to unmarshal event %v", err)
+			return nil, "", trace.Errorf("failed to unmarshal event %v", err)
 		}
 		var accepted bool
 		for i := range eventFilter {
@@ -516,6 +533,7 @@ func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int) (
 			}
 		}
 		if accepted || !doFilter {
+			lastKey = docSnap.Data()["createdAt"].(int64)
 			values = append(values, fields)
 			if limit > 0 && len(values) >= limit {
 				break
@@ -523,19 +541,19 @@ func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int) (
 		}
 	}
 	sort.Sort(events.ByTimeAndIndex(values))
-	return values, nil
+	return values, fmt.Sprintf("%d", lastKey), nil
 }
 
 // SearchSessionEvents returns session related events only. This is used to
 // find completed session.
-func (l *Log) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int) ([]events.EventFields, error) {
+func (l *Log) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int, startKey string) ([]events.EventFields, string, error) {
 	// only search for specific event types
 	query := url.Values{}
 	query[events.EventType] = []string{
 		events.SessionStartEvent,
 		events.SessionEndEvent,
 	}
-	return l.SearchEvents(fromUTC, toUTC, query.Encode(), limit)
+	return l.SearchEvents(fromUTC, toUTC, query.Encode(), limit, startKey)
 }
 
 // WaitForDelivery waits for resources to be released and outstanding requests to
