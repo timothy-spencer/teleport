@@ -14,10 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package services
+package license
 
 import (
 	"fmt"
+
+	"github.com/gravitational/teleport/api/types"
+	"github.com/gravitational/teleport/lib/services"
 
 	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/trace"
@@ -59,21 +62,21 @@ const LicenseSpecV3Template = `{
 }`
 
 // UnmarshalLicense unmarshals the License resource from JSON.
-func UnmarshalLicense(bytes []byte) (License, error) {
+func UnmarshalLicense(bytes []byte) (types.License, error) {
 	if len(bytes) == 0 {
 		return nil, trace.BadParameter("missing resource data")
 	}
 
-	schema := fmt.Sprintf(V2SchemaTemplate, MetadataSchema, LicenseSpecV3Template, DefaultDefinitions)
+	schema := fmt.Sprintf(services.V2SchemaTemplate, services.MetadataSchema, LicenseSpecV3Template, services.DefaultDefinitions)
 
-	var license LicenseV3
+	var license types.LicenseV3
 	err := utils.UnmarshalWithSchema(schema, &license, bytes)
 	if err != nil {
 		return nil, trace.BadParameter(err.Error())
 	}
 
-	if license.Version != V3 {
-		return nil, trace.BadParameter("unsupported version %v, expected version %v", license.Version, V3)
+	if license.Version != services.V3 {
+		return nil, trace.BadParameter("unsupported version %v, expected version %v", license.Version, services.V3)
 	}
 
 	if err := license.CheckAndSetDefaults(); err != nil {
@@ -84,15 +87,15 @@ func UnmarshalLicense(bytes []byte) (License, error) {
 }
 
 // MarshalLicense marshals the License resource to JSON.
-func MarshalLicense(license License, opts ...MarshalOption) ([]byte, error) {
-	cfg, err := CollectOptions(opts)
+func MarshalLicense(license types.License, opts ...services.MarshalOption) ([]byte, error) {
+	cfg, err := services.CollectOptions(opts)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	switch license := license.(type) {
-	case *LicenseV3:
-		if version := license.GetVersion(); version != V3 {
+	case *types.LicenseV3:
+		if version := license.GetVersion(); version != services.V3 {
 			return nil, trace.BadParameter("mismatched license version %v and type %T", version, license)
 		}
 		if !cfg.PreserveResourceID {
