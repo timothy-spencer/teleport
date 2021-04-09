@@ -51,10 +51,16 @@ func (d *DiscardAuditLog) GetSessionChunk(namespace string, sid session.ID, offs
 func (d *DiscardAuditLog) GetSessionEvents(namespace string, sid session.ID, after int, includePrintEvents bool) ([]EventFields, error) {
 	return make([]EventFields, 0), nil
 }
-func (d *DiscardAuditLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
+func (d *DiscardAuditLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit int) ([]EventFields, error) {
+	return make([]EventFields, 0), nil
+}
+func (d *DiscardAuditLog) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
 	return make([]EventFields, 0), "", nil
 }
-func (d *DiscardAuditLog) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
+func (d *DiscardAuditLog) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int) ([]EventFields, error) {
+	return make([]EventFields, 0), nil
+}
+func (d *DiscardAuditLog) SearchSessionEventsPaginated(fromUTC time.Time, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
 	return make([]EventFields, 0), "", nil
 }
 

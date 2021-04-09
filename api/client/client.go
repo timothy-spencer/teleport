@@ -31,6 +31,7 @@ import (
 	"github.com/gravitational/teleport/api/defaults"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/types/events"
+	libevents "github.com/gravitational/teleport/lib/events"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/gravitational/trace"
@@ -844,4 +845,12 @@ func (c *Client) IsMFARequired(ctx context.Context, req *proto.IsMFARequiredRequ
 		return nil, trail.FromGRPC(err)
 	}
 	return resp, nil
+}
+
+func (c *Client) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) (events []libevents.EventFields, lastKey string, err error) {
+	return nil, "", nil
+}
+
+func (c *Client) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) (events []libevents.EventFields, lastKey string, err error) {
+	return nil, "", nil
 }

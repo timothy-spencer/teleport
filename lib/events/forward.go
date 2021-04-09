@@ -243,14 +243,22 @@ func (l *Forwarder) GetSessionEvents(namespace string, sid session.ID, after int
 //
 // The only mandatory requirement is a date range (UTC). Results must always
 // show up sorted by date (newest first)
-func (l *Forwarder) SearchEvents(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
-	return l.ForwardTo.SearchEvents(fromUTC, toUTC, query, limit, startKey)
+func (l *Forwarder) SearchEvents(fromUTC, toUTC time.Time, query string, limit int) ([]EventFields, error) {
+	return l.ForwardTo.SearchEvents(fromUTC, toUTC, query, limit)
+}
+
+func (l *Forwarder) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
+	return l.ForwardTo.SearchEventsPaginated(fromUTC, toUTC, query, limit, startKey)
 }
 
 // SearchSessionEvents returns session related events only. This is used to
 // find completed session.
-func (l *Forwarder) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
-	return l.ForwardTo.SearchSessionEvents(fromUTC, toUTC, limit, startKey)
+func (l *Forwarder) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int) ([]EventFields, error) {
+	return l.ForwardTo.SearchSessionEvents(fromUTC, toUTC, limit)
+}
+
+func (l *Forwarder) SearchSessionEventsPaginated(fromUTC time.Time, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
+	return l.ForwardTo.SearchSessionEventsPaginated(fromUTC, toUTC, limit, startKey)
 }
 
 // WaitForDelivery waits for resources to be released and outstanding requests to

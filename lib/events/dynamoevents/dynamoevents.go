@@ -476,7 +476,12 @@ func (l *Log) GetSessionEvents(namespace string, sid session.ID, after int, inlc
 //
 // The only mandatory requirement is a date range (UTC). Results must always
 // show up sorted by date (newest first)
-func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int, startKey string) ([]events.EventFields, string, error) {
+func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int) ([]events.EventFields, error) {
+	events, _, err := l.SearchEventsPaginated(fromUTC, toUTC, filter, limit, "")
+	return events, err
+}
+
+func (l *Log) SearchEventsPaginated(fromUTC, toUTC time.Time, filter string, limit int, startKey string) ([]events.EventFields, string, error) {
 	var dResumeAt map[string]*dynamodb.AttributeValue
 
 	if startKey != "" {
@@ -580,14 +585,19 @@ func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int, s
 
 // SearchSessionEvents returns session related events only. This is used to
 // find completed session.
-func (l *Log) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int, startKey string) ([]events.EventFields, string, error) {
+func (l *Log) SearchSessionEvents(fromUTC time.Time, toUTC time.Time, limit int) ([]events.EventFields, error) {
+	events, _, err := l.SearchSessionEventsPaginated(fromUTC, toUTC, limit, "")
+	return events, err
+}
+
+func (l *Log) SearchSessionEventsPaginated(fromUTC time.Time, toUTC time.Time, limit int, startKey string) ([]events.EventFields, string, error) {
 	// only search for specific event types
 	query := url.Values{}
 	query[events.EventType] = []string{
 		events.SessionStartEvent,
 		events.SessionEndEvent,
 	}
-	return l.SearchEvents(fromUTC, toUTC, query.Encode(), limit, startKey)
+	return l.SearchEventsPaginated(fromUTC, toUTC, query.Encode(), limit, startKey)
 }
 
 // WaitForDelivery waits for resources to be released and outstanding requests to

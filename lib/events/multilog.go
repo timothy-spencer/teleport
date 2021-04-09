@@ -134,9 +134,14 @@ func (m *MultiLog) GetSessionEvents(namespace string, sid session.ID, after int,
 //
 // The only mandatory requirement is a date range (UTC). Results must always
 // show up sorted by date (newest first)
-func (m *MultiLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit int, startKey string) (events []EventFields, lastKey string, err error) {
+func (m *MultiLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit int) (events []EventFields, err error) {
+	events, _, err = m.SearchEventsPaginated(fromUTC, toUTC, query, limit, "")
+	return events, err
+}
+
+func (m *MultiLog) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) (events []EventFields, lastKey string, err error) {
 	for _, log := range m.loggers {
-		events, lastKey, err := log.SearchEvents(fromUTC, toUTC, query, limit, startKey)
+		events, lastKey, err := log.SearchEventsPaginated(fromUTC, toUTC, query, limit, startKey)
 		if !trace.IsNotImplemented(err) {
 			return events, lastKey, err
 		}
@@ -146,9 +151,14 @@ func (m *MultiLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit in
 
 // SearchSessionEvents returns session related events only. This is used to
 // find completed session.
-func (m *MultiLog) SearchSessionEvents(fromUTC, toUTC time.Time, limit int, startKey string) (events []EventFields, lastKey string, err error) {
+func (m *MultiLog) SearchSessionEvents(fromUTC, toUTC time.Time, limit int) (events []EventFields, err error) {
+	events, _, err = m.SearchSessionEventsPaginated(fromUTC, toUTC, limit, "")
+	return events, err
+}
+
+func (m *MultiLog) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) (events []EventFields, lastKey string, err error) {
 	for _, log := range m.loggers {
-		events, lastKey, err = log.SearchSessionEvents(fromUTC, toUTC, limit, startKey)
+		events, lastKey, err = log.SearchSessionEventsPaginated(fromUTC, toUTC, limit, startKey)
 		if !trace.IsNotImplemented(err) {
 			return events, lastKey, err
 		}

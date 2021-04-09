@@ -159,7 +159,12 @@ func (l *FileLog) EmitAuditEventLegacy(event Event, fields EventFields) error {
 
 // SearchEvents finds events. Results show up sorted by date (newest first),
 // limit is used when set to value > 0
-func (l *FileLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
+func (l *FileLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit int) ([]EventFields, error) {
+	events, _, err := l.SearchEventsPaginated(fromUTC, toUTC, query, limit, "")
+	return events, err
+}
+
+func (l *FileLog) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
 	l.Debugf("SearchEvents(%v, %v, query=%v, limit=%v)", fromUTC, toUTC, query, limit)
 	if limit <= 0 {
 		limit = defaults.EventsIterationLimit
@@ -205,7 +210,12 @@ func (l *FileLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit int
 }
 
 // SearchSessionEvents searches for session related events. Used to find completed sessions.
-func (l *FileLog) SearchSessionEvents(fromUTC, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
+func (l *FileLog) SearchSessionEvents(fromUTC, toUTC time.Time, limit int) ([]EventFields, error) {
+	events, _, err := l.SearchSessionEventsPaginated(fromUTC, toUTC, limit, "")
+	return events, err
+}
+
+func (l *FileLog) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
 	l.Debugf("SearchSessionEvents(%v, %v, %v)", fromUTC, toUTC, limit)
 
 	// only search for specific event types
@@ -219,7 +229,7 @@ func (l *FileLog) SearchSessionEvents(fromUTC, toUTC time.Time, limit int, start
 	// logs, some events can be fetched with session end event and without
 	// session start event. to fix this, the code below filters out the events without
 	// start event to guarantee that all events in the range will get fetched
-	events, lastKey, err := l.SearchEvents(fromUTC, toUTC, query.Encode(), limit, startKey)
+	events, lastKey, err := l.SearchEventsPaginated(fromUTC, toUTC, query.Encode(), limit, startKey)
 	if err != nil {
 		return nil, lastKey, trace.Wrap(err)
 	}

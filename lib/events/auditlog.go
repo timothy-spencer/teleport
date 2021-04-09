@@ -1018,7 +1018,12 @@ func (l *AuditLog) auditDirs() ([]string, error) {
 
 // SearchEvents finds events. Results show up sorted by date (newest first),
 // limit is used when set to value > 0
-func (l *AuditLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
+func (l *AuditLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit int) ([]EventFields, error) {
+	events, _, err := l.SearchEventsPaginated(fromUTC, toUTC, query, limit, "")
+	return events, err
+}
+
+func (l *AuditLog) SearchEventsPaginated(fromUTC, toUTC time.Time, query string, limit int, startKey string) ([]EventFields, string, error) {
 	l.log.Debugf("SearchEvents(%v, %v, query=%v, limit=%v)", fromUTC, toUTC, query, limit)
 	if limit <= 0 {
 		limit = defaults.EventsIterationLimit
@@ -1027,19 +1032,24 @@ func (l *AuditLog) SearchEvents(fromUTC, toUTC time.Time, query string, limit in
 		return nil, "", trace.BadParameter("limit %v exceeds max iteration limit %v", limit, defaults.MaxIterationLimit)
 	}
 	if l.ExternalLog != nil {
-		return l.ExternalLog.SearchEvents(fromUTC, toUTC, query, limit, startKey)
+		return l.ExternalLog.SearchEventsPaginated(fromUTC, toUTC, query, limit, startKey)
 	}
-	return l.localLog.SearchEvents(fromUTC, toUTC, query, limit, startKey)
+	return l.localLog.SearchEventsPaginated(fromUTC, toUTC, query, limit, startKey)
 }
 
 // SearchSessionEvents searches for session related events. Used to find completed sessions.
-func (l *AuditLog) SearchSessionEvents(fromUTC, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
+func (l *AuditLog) SearchSessionEvents(fromUTC, toUTC time.Time, limit int) ([]EventFields, error) {
+	events, _, err := l.SearchSessionEventsPaginated(fromUTC, toUTC, limit, "")
+	return events, err
+}
+
+func (l *AuditLog) SearchSessionEventsPaginated(fromUTC, toUTC time.Time, limit int, startKey string) ([]EventFields, string, error) {
 	l.log.Debugf("SearchSessionEvents(%v, %v, %v)", fromUTC, toUTC, limit)
 
 	if l.ExternalLog != nil {
-		return l.ExternalLog.SearchSessionEvents(fromUTC, toUTC, limit, startKey)
+		return l.ExternalLog.SearchSessionEventsPaginated(fromUTC, toUTC, limit, startKey)
 	}
-	return l.localLog.SearchSessionEvents(fromUTC, toUTC, limit, startKey)
+	return l.localLog.SearchSessionEventsPaginated(fromUTC, toUTC, limit, startKey)
 }
 
 // Closes the audit log, which inluces closing all file handles and releasing
