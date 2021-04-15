@@ -804,7 +804,7 @@ func onLogin(cf *CLIConf) error {
 	}
 
 	if autoRequest && cf.DesiredRoles == "" {
-		var reason, auto bool
+		var requireReason, auto bool
 		var prompt string
 		roleNames, err := key.CertRoles()
 		if err != nil {
@@ -820,7 +820,7 @@ func onLogin(cf *CLIConf) error {
 				if err != nil {
 					return trace.Wrap(err)
 				}
-				reason = reason || role.GetOptions().RequestAccess.RequireReason()
+				requireReason = requireReason || role.GetOptions().RequestAccess.RequireReason()
 				auto = auto || role.GetOptions().RequestAccess.ShouldAutoRequest()
 				if prompt == "" {
 					prompt = role.GetOptions().RequestPrompt
@@ -832,7 +832,7 @@ func onLogin(cf *CLIConf) error {
 			logoutErr := tc.Logout()
 			return trace.NewAggregate(err, logoutErr)
 		}
-		if reason && cf.RequestReason == "" {
+		if requireReason && cf.RequestReason == "" {
 			msg := "--request-reason must be specified"
 			if prompt != "" {
 				msg = msg + ", prompt=" + prompt
