@@ -324,10 +324,15 @@ func (c *testContext) startHandlingConnections() {
 // postgresClient connects to test Postgres through database access as a
 // specified Teleport user and database account.
 func (c *testContext) postgresClient(ctx context.Context, teleportUser, dbService, dbUser, dbName string) (*pgconn.PgConn, error) {
+	return c.postgresClientAddr(ctx, c.mux.DB().Addr().String(), teleportUser, dbService, dbUser, dbName)
+}
+
+// postgresClientAddr like postgresClient but allows to override connection address.
+func (c *testContext) postgresClientAddr(ctx context.Context, address, teleportUser, dbService, dbUser, dbName string) (*pgconn.PgConn, error) {
 	return postgres.MakeTestClient(ctx, common.TestClientConfig{
 		AuthClient: c.authClient,
 		AuthServer: c.authServer,
-		Address:    c.mux.DB().Addr().String(),
+		Address:    address,
 		Cluster:    c.clusterName,
 		Username:   teleportUser,
 		RouteToDatabase: tlsca.RouteToDatabase{
@@ -342,10 +347,15 @@ func (c *testContext) postgresClient(ctx context.Context, teleportUser, dbServic
 // mysqlClient connects to test MySQL through database access as a specified
 // Teleport user and database account.
 func (c *testContext) mysqlClient(teleportUser, dbService, dbUser string) (*client.Conn, error) {
+	return c.mysqlClientAddr(c.mysqlListener.Addr().String(), teleportUser, dbService, dbUser)
+}
+
+// mysqlClientAddr like mysqlClient but allows to override connection address.
+func (c *testContext) mysqlClientAddr(address, teleportUser, dbService, dbUser string) (*client.Conn, error) {
 	return mysql.MakeTestClient(common.TestClientConfig{
 		AuthClient: c.authClient,
 		AuthServer: c.authServer,
-		Address:    c.mysqlListener.Addr().String(),
+		Address:    address,
 		Cluster:    c.clusterName,
 		Username:   teleportUser,
 		RouteToDatabase: tlsca.RouteToDatabase{
@@ -394,7 +404,11 @@ func setupTestContext(ctx context.Context, t *testing.T, withDatabases ...withDa
 	// Create multiplexer.
 	listener, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
-	testCtx.mux, err = multiplexer.New(multiplexer.Config{ID: "test", Listener: listener})
+	testCtx.mux, err = multiplexer.New(multiplexer.Config{
+		ID:                  "test",
+		Listener:            listener,
+		EnableProxyProtocol: true,
+	})
 	require.NoError(t, err)
 
 	// Create MySQL proxy listener.

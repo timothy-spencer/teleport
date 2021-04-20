@@ -35,6 +35,14 @@ type Conn struct {
 	reader    *bufio.Reader
 }
 
+// NewConn returns a net.Conn wrapper that supports peeking into the connection.
+func NewConn(conn net.Conn) *Conn {
+	return &Conn{
+		Conn:   conn,
+		reader: bufio.NewReader(conn),
+	}
+}
+
 // Read reads from connection
 func (c *Conn) Read(p []byte) (int, error) {
 	return c.reader.Read(p)
@@ -59,6 +67,28 @@ func (c *Conn) RemoteAddr() net.Addr {
 // Protocol returns the detected connection protocol
 func (c *Conn) Protocol() int {
 	return c.protocol
+}
+
+// Detect detects the connection protocol by peeking into the first few bytes.
+func (c *Conn) Detect() (int, error) {
+	bytes, err := c.reader.Peek(8)
+	if err != nil {
+		return ProtoUnknown, trace.Wrap(err)
+	}
+	proto, err := detectProto(bytes)
+	if err != nil && !trace.IsBadParameter(err) {
+		return ProtoUnknown, trace.Wrap(err)
+	}
+	return proto, nil
+}
+
+// ReadProxyLine reads proxy-line from the connection.
+func (c *Conn) ReadProxyLine() (*ProxyLine, error) {
+	proxyLine, err := ReadProxyLine(c.reader)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return proxyLine, nil
 }
 
 func newListener(parent context.Context, addr net.Addr) *Listener {

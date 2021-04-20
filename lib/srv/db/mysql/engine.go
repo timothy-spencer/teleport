@@ -19,12 +19,11 @@ package mysql
 import (
 	"context"
 	"net"
-	"strings"
 
-	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/srv/db/common"
 	"github.com/gravitational/teleport/lib/srv/db/mysql/protocol"
+	"github.com/gravitational/teleport/lib/utils"
 
 	"github.com/siddontang/go-mysql/client"
 	"github.com/siddontang/go-mysql/packet"
@@ -178,6 +177,11 @@ func (e *Engine) receiveFromClient(clientConn, serverConn net.Conn, clientErrCh 
 	for {
 		packet, err := protocol.ParsePacket(clientConn)
 		if err != nil {
+			if utils.IsOKNetworkError(err) {
+				log.Debug("Client connection closed.")
+				clientErrCh <- nil
+				return
+			}
 			log.WithError(err).Error("Failed to read client packet.")
 			clientErrCh <- err
 			return
@@ -210,7 +214,7 @@ func (e *Engine) receiveFromServer(serverConn, clientConn net.Conn, serverErrCh 
 	for {
 		packet, err := protocol.ParsePacket(serverConn)
 		if err != nil {
-			if strings.Contains(err.Error(), teleport.UseOfClosedNetworkConnection) {
+			if utils.IsOKNetworkError(err) {
 				log.Debug("Server connection closed.")
 				serverErrCh <- nil
 				return
