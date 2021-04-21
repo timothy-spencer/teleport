@@ -5298,3 +5298,120 @@ func TestWebProxyInsecure(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
 }
+
+// TestTraitsPropagation makes sure that user traits are applied properly to
+// roles in root and leaf clusters.
+func TestTraitsPropagation(t *testing.T) {
+	log := testlog.FailureOnly(t)
+	startPort := utils.PortStartingNumber + (5 * AllocatePortsNum) + 1
+	ports, err := utils.GetFreeTCPPorts(AllocatePortsNum, startPort)
+	require.NoError(t, err)
+
+	privateKey, publicKey, err := testauthority.New().GenerateKeyPair("")
+	require.NoError(t, err)
+
+	// Create root cluster.
+	rc := NewInstance(InstanceConfig{
+		ClusterName: "root.example.com",
+		HostID:      uuid.New(),
+		NodeName:    Host,
+		Ports:       ports.PopIntSlice(6),
+		Priv:        privateKey,
+		Pub:         publicKey,
+		log:         log,
+	})
+
+	// Create leaf cluster.
+	lc := NewInstance(InstanceConfig{
+		ClusterName: "leaf.example.com",
+		HostID:      uuid.New(),
+		NodeName:    Host,
+		Ports:       ports.PopIntSlice(6),
+		Priv:        privateKey,
+		Pub:         publicKey,
+		log:         log,
+	})
+
+	// Make root cluster config.
+	rcConf := service.MakeDefaultConfig()
+	rcConf.DataDir = t.TempDir()
+	rcConf.Auth.Enabled = true
+	rcConf.Auth.Preference.SetSecondFactor("off")
+	rcConf.Proxy.Enabled = true
+	rcConf.Proxy.DisableWebService = true
+	rcConf.Proxy.DisableWebInterface = true
+	rcConf.SSH.Enabled = true
+	rcConf.SSH.Addr.Addr = net.JoinHostPort(rc.Hostname, rc.GetPortSSH())
+	rcConf.SSH.Labels = map[string]string{"env": "integration"}
+
+	// Make leaf cluster config.
+	lcConf := service.MakeDefaultConfig()
+	lcConf.DataDir = t.TempDir()
+	lcConf.Auth.Enabled = true
+	lcConf.Auth.Preference.SetSecondFactor("off")
+	lcConf.Proxy.Enabled = true
+	lcConf.Proxy.DisableWebInterface = true
+	lcConf.SSH.Enabled = true
+	lcConf.SSH.Addr.Addr = net.JoinHostPort(lc.Hostname, lc.GetPortSSH())
+	lcConf.SSH.Labels = map[string]string{"env": "integration"}
+
+	// Create identical user/role in both clusters.
+	me, err := user.Current()
+	require.NoError(t, err)
+
+	role := services.NewAdminRole()
+	role.SetName("test")
+	role.SetLogins(services.Allow, []string{me.Username})
+	// Users created by CreateEx have "testing: integration" trait.
+	role.SetNodeLabels(services.Allow, map[string]utils.Strings{"env": []string{"{{external.testing}}"}})
+
+	rc.AddUserWithRole(me.Username, role)
+	lc.AddUserWithRole(me.Username, role)
+
+	// Establish trust b/w root and leaf.
+	err = rc.CreateEx(lc.Secrets.AsSlice(), rcConf)
+	require.NoError(t, err)
+	err = lc.CreateEx(rc.Secrets.AsSlice(), lcConf)
+	require.NoError(t, err)
+
+	// Start both clusters.
+	require.NoError(t, rc.Start())
+	t.Cleanup(func() {
+		rc.StopAll()
+	})
+	require.NoError(t, lc.Start())
+	t.Cleanup(func() {
+		lc.StopAll()
+	})
+
+	// Update root's certificate authority on leaf to configure role mapping.
+	ca, err := lc.Process.GetAuthServer().GetCertAuthority(services.CertAuthID{
+		Type:       services.UserCA,
+		DomainName: rc.Secrets.SiteName,
+	}, false)
+	require.NoError(t, err)
+	ca.SetRoles(nil) // Reset roles, otherwise they will take precedence.
+	ca.SetRoleMap(services.RoleMap{{Remote: role.GetName(), Local: []string{role.GetName()}}})
+	err = lc.Process.GetAuthServer().UpsertCertAuthority(ca)
+	require.NoError(t, err)
+
+	// Run command in root.
+	outputRoot, err := runCommand(rc, []string{"echo", "hello root"}, ClientConfig{
+		Login:   me.Username,
+		Cluster: "root.example.com",
+		Host:    Loopback,
+		Port:    rc.GetPortSSHInt(),
+	}, 1)
+	require.NoError(t, err)
+	require.Equal(t, "hello root", strings.TrimSpace(outputRoot))
+
+	// Run command in leaf.
+	outputLeaf, err := runCommand(rc, []string{"echo", "hello leaf"}, ClientConfig{
+		Login:   me.Username,
+		Cluster: "leaf.example.com",
+		Host:    Loopback,
+		Port:    lc.GetPortSSHInt(),
+	}, 1)
+	require.NoError(t, err)
+	require.Equal(t, "hello leaf", strings.TrimSpace(outputLeaf))
+}

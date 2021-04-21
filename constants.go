@@ -539,6 +539,17 @@ const (
 	TraitInternalDBUsersVariable = "{{internal.db_users}}"
 )
 
+// IsInternalTrait returns true if the passed trait name is one of the internal
+// traits.
+func IsInternalTrait(trait string) bool {
+	switch trait {
+	case TraitLogins, TraitKubeGroups, TraitKubeUsers, TraitDBNames, TraitDBUsers:
+		return true
+	default:
+		return false
+	}
+}
+
 const (
 	// GSuiteIssuerURL is issuer URL used for GSuite provider
 	GSuiteIssuerURL = "https://accounts.google.com"
