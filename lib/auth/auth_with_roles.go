@@ -606,6 +606,14 @@ func (a *ServerWithRoles) DeleteNode(ctx context.Context, namespace, node string
 	return a.authServer.DeleteNode(ctx, namespace, node)
 }
 
+// GetNode gets a node by name and namespace.
+func (a *ServerWithRoles) GetNode(ctx context.Context, namespace, name string) (types.Server, error) {
+	if err := a.action(namespace, services.KindNode, services.VerbRead); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return a.authServer.GetCache().GetNode(ctx, namespace, name)
+}
+
 func (a *ServerWithRoles) GetNodes(ctx context.Context, namespace string, opts ...services.MarshalOption) ([]services.Server, error) {
 	if err := a.action(namespace, services.KindNode, services.VerbList); err != nil {
 		return nil, trace.Wrap(err)
