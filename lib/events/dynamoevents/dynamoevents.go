@@ -724,43 +724,58 @@ func (l *Log) createV2GSI(tableName string) error {
 // - This function must be called after `createV2GSI` has completed successfully on the table.
 // - This function must not be called concurrently with itself.
 func (l *Log) migrateDateAttribute(tableName string) error {
-	// Query fillins.
-	attributes := map[string]interface{}{
-		// We need to filter by this namespace.
-		":eventNamespace": defaults.Namespace,
+	var total int64
+	var startKey map[string]*dynamodb.AttributeValue
 
-		// Filter out events if they have this attribute.
-		":notDefined": keyDate,
-	}
+	for {
+		// Query fillins.
+		attributes := map[string]interface{}{
+			// We need to filter by this namespace.
+			":eventNamespace": defaults.Namespace,
 
-	// Marshal attribute map into a usable form.
-	attributeMap, err := dynamodbattribute.MarshalMap(attributes)
-	if err != nil {
-		return trace.Wrap(err)
-	}
+			// Filter out events if they have this attribute.
+			":notDefined": keyDate,
+		}
 
-	//var lastEvaluatedKey map[string]*dynamodb.AttributeValue
+		// Marshal attribute map into a usable form.
+		attributeMap, err := dynamodbattribute.MarshalMap(attributes)
+		if err != nil {
+			return trace.Wrap(err)
+		}
 
-	c := &dynamodb.ScanInput{
-		// Without consistent reads we may miss events as DynamoDB does not
-		// specify a synchronisation grace period.
-		ConsistentRead:            aws.Bool(true),
-		ExpressionAttributeValues: attributeMap,
-		// Use the old global secondary index as a base for scanning.
-		// This is somehow faster, won't question why.
-		IndexName: aws.String(indexTimeSearch),
-		// 100 seems like a good batch size that compromises
-		// between memory usage and fetch frequency.
-		// The limiting factor in terms of speed is the update ratelimit and not this.
-		Limit:     aws.Int64(100),
-		TableName: aws.String(tableName),
-		// Only return events with a matching namespace and without the `date` attribute.
-		FilterExpression: aws.String("EventNamespace = :eventNamespace AND attribute_not_exists(:notDefined)"),
-	}
+		c := &dynamodb.ScanInput{
+			ExclusiveStartKey: startKey,
+			// Without consistent reads we may miss events as DynamoDB does not
+			// specify a synchronisation grace period.
+			ConsistentRead:            aws.Bool(true),
+			ExpressionAttributeValues: attributeMap,
+			// Use the old global secondary index as a base for scanning.
+			// This is somehow faster, won't question why.
+			IndexName: aws.String(indexTimeSearch),
+			// 100 seems like a good batch size that compromises
+			// between memory usage and fetch frequency.
+			// The limiting factor in terms of speed is the update ratelimit and not this.
+			Limit:     aws.Int64(100),
+			TableName: aws.String(tableName),
+			// Only return events with a matching namespace and without the `date` attribute.
+			FilterExpression: aws.String("EventNamespace = :eventNamespace AND attribute_not_exists(:notDefined)"),
+		}
 
-	_, err = l.svc.Scan(c)
-	if err != nil {
-		return trace.Wrap(err)
+		scanOut, err := l.svc.Scan(c)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		total += *scanOut.Count
+		startKey = scanOut.LastEvaluatedKey
+
+		// processing
+
+		log.Infof("Step 2/3: Migrated %q total events", total)
+		if startKey == nil {
+			log.Info("Step 2/3 Completed: Migrated events to work with new index")
+			break
+		}
 	}
 
 	return nil
