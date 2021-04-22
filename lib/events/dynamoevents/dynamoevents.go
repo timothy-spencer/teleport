@@ -724,6 +724,10 @@ type migrateScanAttributes struct {
 // migrateDateAttribute walks existing events and calculates the value of the new `date`
 // attribute and updates the event. This is needed by the new global secondary index
 // schema introduced in RFD 24.
+//
+// Invariants:
+// - This function must be called after `createV2GSI` has completed successfully on the table.
+// - This function must not be called concurrently with itself.
 func (l *Log) migrateDateAttribute(tableName string) error {
 	// Needed query attributes.
 	attributes := migrateScanAttributes{
