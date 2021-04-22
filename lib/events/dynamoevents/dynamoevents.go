@@ -716,6 +716,47 @@ func (l *Log) createV2GSI(tableName string) error {
 	return nil
 }
 
+type migrateScanAttributes struct {
+	nameSpace  string
+	notDefined string
+}
+
+// migrateDateAttribute walks existing events and calculates the value of the new `date`
+// attribute and updates the event. This is needed by the new global secondary index
+// schema introduced in RFD 24.
+func (l *Log) migrateDateAttribute(tableName string) error {
+	// Needed query attributes.
+	attributes := migrateScanAttributes{
+		// We need to filter by this namespace.
+		nameSpace: defaults.Namespace,
+
+		// Filter out events if they have this attribute.
+		notDefined: keyDate,
+	}
+
+	// Marshal attribute map into a usable form.
+	attributeMap, err := dynamodbattribute.MarshalMap(attributes)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	readConsistency := true
+	var lastEvaluatedKey map[string]*dynamodb.AttributeValue
+
+	c := &dynamodb.ScanInput{
+		ConsistentRead:            &readConsistency,
+		ExpressionAttributeValues: attributeMap,
+		IndexName:                 aws.String(indexTimeSearch),
+	}
+
+	_, err = l.svc.Scan(c)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	return nil
+}
+
 // createTable creates a DynamoDB table with a requested name and applies
 // the back-end schema to it. The table must not exist.
 //
