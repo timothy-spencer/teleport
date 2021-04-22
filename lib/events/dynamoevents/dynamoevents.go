@@ -156,9 +156,18 @@ const (
 	// keyCreatedAt identifies created at key
 	keyCreatedAt = "CreatedAt"
 
+	// keyDate identifies the date the event was created at in UTC.
+	// The date takes the format `yyyy-mm-dd` as a string.
+	// Specified in RFD 24.
+	keyDate = "Date"
+
 	// indexTimeSearch is a secondary global index that allows searching
 	// of the events by time
 	indexTimeSearch = "timesearch"
+
+	// indexTimeSearchV2 is the new secondary global index proposed in RFD 24.
+	// Allows searching events by time.
+	indexTimeSearchV2 = "timesearchV2"
 
 	// DefaultReadCapacityUnits specifies default value for read capacity units
 	DefaultReadCapacityUnits = 10
@@ -623,6 +632,88 @@ func (l *Log) getTableStatus(tableName string) (tableStatus, error) {
 		return tableStatusError, trace.Wrap(err)
 	}
 	return tableStatusOK, nil
+}
+
+// createV2GSI creates the new global secondary Index and updates
+// the schema to add a string key `date`.
+//
+// This does not remove the old global secondary index.
+// This must be done at a later point in time when all events have been migrated as per RFD 24.
+//
+// Invariants:
+// - The new global secondary index must not exist.
+// - This function must not be called concurrently with itself.
+func (l *Log) createV2GSI(tableName string) error {
+	// Defines an updated table schema that adds the keyDate key.
+	// Otherwise the same as the original schema but we have to
+	// resend the full schema due to how DynamoDB works.
+	def := []*dynamodb.AttributeDefinition{
+		{
+			AttributeName: aws.String(keySessionID),
+			AttributeType: aws.String("S"),
+		},
+		{
+			AttributeName: aws.String(keyEventIndex),
+			AttributeType: aws.String("N"),
+		},
+		{
+			AttributeName: aws.String(keyEventNamespace),
+			AttributeType: aws.String("S"),
+		},
+		{
+			AttributeName: aws.String(keyCreatedAt),
+			AttributeType: aws.String("N"),
+		},
+		{
+			AttributeName: aws.String(keyDate),
+			AttributeType: aws.String("S"),
+		},
+	}
+
+	provisionedThroughput := dynamodb.ProvisionedThroughput{
+		ReadCapacityUnits:  aws.Int64(l.ReadCapacityUnits),
+		WriteCapacityUnits: aws.Int64(l.WriteCapacityUnits),
+	}
+
+	// This defines the update event we send to DynamoDB.
+	// This update sends an updated schema and an child event
+	// to create the new global secondary index.
+	c := dynamodb.UpdateTableInput{
+		TableName:            aws.String(tableName),
+		AttributeDefinitions: def,
+		GlobalSecondaryIndexUpdates: []*dynamodb.GlobalSecondaryIndexUpdate{
+			{
+				Create: &dynamodb.CreateGlobalSecondaryIndexAction{
+					IndexName: aws.String(indexTimeSearchV2),
+					KeySchema: []*dynamodb.KeySchemaElement{
+						{
+							AttributeName: aws.String(keyDate),
+							// Partition by date instead of namespace.
+							KeyType: aws.String("HASH"),
+						},
+						{
+							AttributeName: aws.String(keyCreatedAt),
+							KeyType:       aws.String("RANGE"),
+						},
+					},
+					Projection: &dynamodb.Projection{
+						ProjectionType: aws.String("ALL"),
+					},
+					ProvisionedThroughput: &provisionedThroughput,
+				},
+			},
+		},
+	}
+
+	// Sends the update request to AWS. These updates are atomic
+	// from my understanding and it is thus safe to simply send the error
+	// upwards to the caller without leaving any traces.
+	if _, err := l.svc.UpdateTable(&c); err != nil {
+		return trace.Wrap(err)
+	}
+
+	log.Infof("Step 1/3 Complete: Migrated schema and created global secondary index for table %q", tableName)
+	return nil
 }
 
 // createTable creates a DynamoDB table with a requested name and applies
