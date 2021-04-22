@@ -716,11 +716,6 @@ func (l *Log) createV2GSI(tableName string) error {
 	return nil
 }
 
-type migrateScanAttributes struct {
-	nameSpace  string
-	notDefined string
-}
-
 // migrateDateAttribute walks existing events and calculates the value of the new `date`
 // attribute and updates the event. This is needed by the new global secondary index
 // schema introduced in RFD 24.
@@ -729,13 +724,13 @@ type migrateScanAttributes struct {
 // - This function must be called after `createV2GSI` has completed successfully on the table.
 // - This function must not be called concurrently with itself.
 func (l *Log) migrateDateAttribute(tableName string) error {
-	// Needed query attributes.
-	attributes := migrateScanAttributes{
+	// Query fillins.
+	attributes := map[string]interface{}{
 		// We need to filter by this namespace.
-		nameSpace: defaults.Namespace,
+		":eventNamespace": defaults.Namespace,
 
 		// Filter out events if they have this attribute.
-		notDefined: keyDate,
+		":notDefined": keyDate,
 	}
 
 	// Marshal attribute map into a usable form.
@@ -744,13 +739,23 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 		return trace.Wrap(err)
 	}
 
-	readConsistency := true
-	var lastEvaluatedKey map[string]*dynamodb.AttributeValue
+	//var lastEvaluatedKey map[string]*dynamodb.AttributeValue
 
 	c := &dynamodb.ScanInput{
-		ConsistentRead:            &readConsistency,
+		// Without consistent reads we may miss events as DynamoDB does not
+		// specify a synchronisation grace period.
+		ConsistentRead:            aws.Bool(true),
 		ExpressionAttributeValues: attributeMap,
-		IndexName:                 aws.String(indexTimeSearch),
+		// Use the old global secondary index as a base for scanning.
+		// This is somehow faster, won't question why.
+		IndexName: aws.String(indexTimeSearch),
+		// 100 seems like a good batch size that compromises
+		// between memory usage and fetch frequency.
+		// The limiting factor in terms of speed is the update ratelimit and not this.
+		Limit:     aws.Int64(100),
+		TableName: aws.String(tableName),
+		// Only return events with a matching namespace and without the `date` attribute.
+		FilterExpression: aws.String("EventNamespace = :eventNamespace AND attribute_not_exists(:notDefined)"),
 	}
 
 	_, err = l.svc.Scan(c)
