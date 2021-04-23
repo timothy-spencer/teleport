@@ -805,7 +805,7 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 		// For every item processed by this scan iteration we send an update action
 		// that adds the new date attribute.
 		for _, item := range scanOut.Items {
-			// Extract the UTC timestamp integeger of the event.
+			// Extract the UTC timestamp integer of the event.
 			timestampAttribute := item[keyCreatedAt]
 			var timestampRaw int64
 			err = dynamodbattribute.Unmarshal(timestampAttribute, &timestampRaw)
