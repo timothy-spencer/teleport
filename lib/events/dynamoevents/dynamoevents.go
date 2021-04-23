@@ -719,7 +719,7 @@ func (l *Log) createV2GSI(tableName string) error {
 
 // removeV1GSI removes the pre RFD 24 global secondary index from the table.
 //
-// Invariants
+// Invariants:
 // - The pre RFD 24 global secondary index must exist.
 // - This function must not be called concurrently with itself.
 // - This may only be executed after the post RFD 24 global secondary index has been created.
