@@ -808,7 +808,6 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 				UpdateExpression:          aws.String("SET :keyDate = :date"),
 			}
 
-			// TO-DO: handle rate limiting
 			_, err = l.svc.UpdateItem(c)
 			if err != nil {
 				return trace.Wrap(convertError(err))
