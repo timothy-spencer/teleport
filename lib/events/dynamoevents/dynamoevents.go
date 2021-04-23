@@ -756,7 +756,7 @@ func (l *Log) removeV1GSI(tableName string) error {
 // - This function must be called after `createV2GSI` has completed successfully on the table.
 // - This function must not be called concurrently with itself.
 func (l *Log) migrateDateAttribute(tableName string) error {
-	var total int64
+	var total int64 = 0
 	var startKey map[string]*dynamodb.AttributeValue
 
 	for {
