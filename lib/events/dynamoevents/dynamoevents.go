@@ -346,7 +346,7 @@ func (l *Log) migrateRFD24(ctx context.Context, dataBackend backend.Backend) err
 	go func() {
 		err := l.migrateDateAttribute(ctx)
 		if err != nil {
-			log.WithError(err).Error("Encounted error migrating events to RFD 24 format")
+			log.WithError(err).Error("Encountered error migrating events to RFD 24 format")
 		}
 	}()
 
