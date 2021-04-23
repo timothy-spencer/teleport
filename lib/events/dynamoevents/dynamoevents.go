@@ -260,7 +260,7 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 			return nil, trace.Wrap(err)
 		}
 
-		if err := dynamo.SetAutoScaling(ctx, applicationautoscaling.New(b.session), dynamo.GetIndexID(b.Tablename, indexTimeSearch), dynamo.AutoScalingParams{
+		if err := dynamo.SetAutoScaling(ctx, applicationautoscaling.New(b.session), dynamo.GetIndexID(b.Tablename, indexTimeSearchV2), dynamo.AutoScalingParams{
 			ReadMinCapacity:  b.Config.ReadMinCapacity,
 			ReadMaxCapacity:  b.Config.ReadMaxCapacity,
 			ReadTargetValue:  b.Config.ReadTargetValue,
@@ -526,11 +526,12 @@ func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int) (
 	// Because the maximum size of the dynamo db response size is 900K according to documentation,
 	// we arbitrary limit the total size to 100MB to prevent runaway loops.
 	for pageCount := 0; pageCount < 100; pageCount++ {
+		// TO-DO: Update query to work with the next index.
 		input := dynamodb.QueryInput{
 			KeyConditionExpression:    aws.String(query),
 			TableName:                 aws.String(l.Tablename),
 			ExpressionAttributeValues: attributeValues,
-			IndexName:                 aws.String(indexTimeSearch),
+			IndexName:                 aws.String(indexTimeSearchV2),
 			ExclusiveStartKey:         lastEvaluatedKey,
 		}
 		start := time.Now()
@@ -905,25 +906,6 @@ func (l *Log) createTable(tableName string) error {
 		AttributeDefinitions:  def,
 		KeySchema:             elems,
 		ProvisionedThroughput: &provisionedThroughput,
-		GlobalSecondaryIndexes: []*dynamodb.GlobalSecondaryIndex{
-			{
-				IndexName: aws.String(indexTimeSearch),
-				KeySchema: []*dynamodb.KeySchemaElement{
-					{
-						AttributeName: aws.String(keyEventNamespace),
-						KeyType:       aws.String("HASH"),
-					},
-					{
-						AttributeName: aws.String(keyCreatedAt),
-						KeyType:       aws.String("RANGE"),
-					},
-				},
-				Projection: &dynamodb.Projection{
-					ProjectionType: aws.String("ALL"),
-				},
-				ProvisionedThroughput: &provisionedThroughput,
-			},
-		},
 	}
 	_, err := l.svc.CreateTable(&c)
 	if err != nil {
