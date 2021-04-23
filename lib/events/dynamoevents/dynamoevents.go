@@ -714,7 +714,6 @@ func (l *Log) createV2GSI(tableName string) error {
 		return trace.Wrap(convertError(err))
 	}
 
-	log.Infof("Step 1/3 Complete: Migrated schema and created global secondary index for table %q", tableName)
 	return nil
 }
 
