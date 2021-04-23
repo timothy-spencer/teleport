@@ -648,6 +648,7 @@ func (l *Log) createV2GSI(tableName string) error {
 	// Otherwise the same as the original schema but we have to
 	// resend the full schema due to how DynamoDB works.
 	def := []*dynamodb.AttributeDefinition{
+		// Existing attributes
 		{
 			AttributeName: aws.String(keySessionID),
 			AttributeType: aws.String("S"),
@@ -664,6 +665,7 @@ func (l *Log) createV2GSI(tableName string) error {
 			AttributeName: aws.String(keyCreatedAt),
 			AttributeType: aws.String("N"),
 		},
+		// New attribute
 		{
 			AttributeName: aws.String(keyDate),
 			AttributeType: aws.String("S"),
@@ -750,7 +752,9 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 		c := &dynamodb.ScanInput{
 			ExclusiveStartKey: startKey,
 			// Without consistent reads we may miss events as DynamoDB does not
-			// specify a synchronisation grace period.
+			// specify a synchronisation grace period. This makes the scan operation
+			// slightly slower but the other alternative is scanning a second time
+			// for any missed events after an appropriate grace period which is far worse.
 			ConsistentRead:            aws.Bool(true),
 			ExpressionAttributeValues: attributeMap,
 			// Use the old global secondary index as a base for scanning.
@@ -820,7 +824,10 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 		total += *scanOut.Count
 
 		log.Infof("Step 2/3: Migrated %q total events", total)
-		if startKey == nil {
+
+		// If the `LastEvaluatedKey` field is not set we have finished scanning
+		// the entire dataset and we can now break out of the loop.
+		if scanOut.LastEvaluatedKey == nil {
 			log.Info("Step 2/3 Completed: Migrated events to work with new index")
 			break
 		}
