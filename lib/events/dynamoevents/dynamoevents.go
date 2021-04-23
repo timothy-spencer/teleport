@@ -43,6 +43,34 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Defines an updated table schema that adds the keyDate key.
+// Otherwise the same as the original schema but we have to
+// resend the full schema due to how DynamoDB works.
+var tableSchema = []*dynamodb.AttributeDefinition{
+	// Existing attributes pre RFD 24.
+	{
+		AttributeName: aws.String(keySessionID),
+		AttributeType: aws.String("S"),
+	},
+	{
+		AttributeName: aws.String(keyEventIndex),
+		AttributeType: aws.String("N"),
+	},
+	{
+		AttributeName: aws.String(keyEventNamespace),
+		AttributeType: aws.String("S"),
+	},
+	{
+		AttributeName: aws.String(keyCreatedAt),
+		AttributeType: aws.String("N"),
+	},
+	// New attribute in RFD 24.
+	{
+		AttributeName: aws.String(keyDate),
+		AttributeType: aws.String("S"),
+	},
+}
+
 // Config structure represents DynamoDB confniguration as appears in `storage` section
 // of Teleport YAML
 type Config struct {
@@ -647,34 +675,6 @@ func (l *Log) getTableStatus(tableName string) (tableStatus, error) {
 // - This function must be called before the
 //   backend is considered initialized and the main Teleport process is started.
 func (l *Log) createV2GSI(tableName string) error {
-	// Defines an updated table schema that adds the keyDate key.
-	// Otherwise the same as the original schema but we have to
-	// resend the full schema due to how DynamoDB works.
-	def := []*dynamodb.AttributeDefinition{
-		// Existing attributes pre RFD 24.
-		{
-			AttributeName: aws.String(keySessionID),
-			AttributeType: aws.String("S"),
-		},
-		{
-			AttributeName: aws.String(keyEventIndex),
-			AttributeType: aws.String("N"),
-		},
-		{
-			AttributeName: aws.String(keyEventNamespace),
-			AttributeType: aws.String("S"),
-		},
-		{
-			AttributeName: aws.String(keyCreatedAt),
-			AttributeType: aws.String("N"),
-		},
-		// New attribute in RFD 24.
-		{
-			AttributeName: aws.String(keyDate),
-			AttributeType: aws.String("S"),
-		},
-	}
-
 	provisionedThroughput := dynamodb.ProvisionedThroughput{
 		ReadCapacityUnits:  aws.Int64(l.ReadCapacityUnits),
 		WriteCapacityUnits: aws.Int64(l.WriteCapacityUnits),
@@ -685,7 +685,7 @@ func (l *Log) createV2GSI(tableName string) error {
 	// to create the new global secondary index.
 	c := dynamodb.UpdateTableInput{
 		TableName:            aws.String(tableName),
-		AttributeDefinitions: def,
+		AttributeDefinitions: tableSchema,
 		GlobalSecondaryIndexUpdates: []*dynamodb.GlobalSecondaryIndexUpdate{
 			{
 				Create: &dynamodb.CreateGlobalSecondaryIndexAction{
@@ -849,12 +849,11 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 		startKey = scanOut.LastEvaluatedKey
 
 		total += *scanOut.Count
-		log.Infof("Step 2/3: Migrated %q total events", total)
+		log.Infof("Migrated %q total events", total)
 
 		// If the `LastEvaluatedKey` field is not set we have finished scanning
 		// the entire dataset and we can now break out of the loop.
 		if scanOut.LastEvaluatedKey == nil {
-			log.Info("Step 2/3 Completed: Migrated events to work with new index")
 			break
 		}
 	}
@@ -873,24 +872,6 @@ func (l *Log) createTable(tableName string) error {
 		ReadCapacityUnits:  aws.Int64(l.ReadCapacityUnits),
 		WriteCapacityUnits: aws.Int64(l.WriteCapacityUnits),
 	}
-	def := []*dynamodb.AttributeDefinition{
-		{
-			AttributeName: aws.String(keySessionID),
-			AttributeType: aws.String("S"),
-		},
-		{
-			AttributeName: aws.String(keyEventIndex),
-			AttributeType: aws.String("N"),
-		},
-		{
-			AttributeName: aws.String(keyEventNamespace),
-			AttributeType: aws.String("S"),
-		},
-		{
-			AttributeName: aws.String(keyCreatedAt),
-			AttributeType: aws.String("N"),
-		},
-	}
 	elems := []*dynamodb.KeySchemaElement{
 		{
 			AttributeName: aws.String(keySessionID),
@@ -903,7 +884,7 @@ func (l *Log) createTable(tableName string) error {
 	}
 	c := dynamodb.CreateTableInput{
 		TableName:             aws.String(tableName),
-		AttributeDefinitions:  def,
+		AttributeDefinitions:  tableSchema,
 		KeySchema:             elems,
 		ProvisionedThroughput: &provisionedThroughput,
 	}
