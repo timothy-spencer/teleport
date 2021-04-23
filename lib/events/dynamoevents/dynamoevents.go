@@ -687,9 +687,9 @@ func (l *Log) createV2GSI(tableName string) error {
 					IndexName: aws.String(indexTimeSearchV2),
 					KeySchema: []*dynamodb.KeySchemaElement{
 						{
-							AttributeName: aws.String(keyDate),
 							// Partition by date instead of namespace.
-							KeyType: aws.String("HASH"),
+							AttributeName: aws.String(keyDate),
+							KeyType:       aws.String("HASH"),
 						},
 						{
 							AttributeName: aws.String(keyCreatedAt),
@@ -720,6 +720,11 @@ func (l *Log) createV2GSI(tableName string) error {
 // attribute and updates the event. This is needed by the new global secondary index
 // schema introduced in RFD 24.
 //
+// This function is not atomic on error but safely interruptible.
+// This means that the function may return an error without having processed
+// all data but no residual temporary or broken data is left and
+// the process can be resumed at any time by running this function again.
+//
 // Invariants:
 // - This function must be called after `createV2GSI` has completed successfully on the table.
 // - This function must not be called concurrently with itself.
@@ -728,7 +733,6 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 	var startKey map[string]*dynamodb.AttributeValue
 
 	for {
-		// Query fillins.
 		attributes := map[string]interface{}{
 			// We need to filter by this namespace.
 			":eventNamespace": defaults.Namespace,
@@ -761,15 +765,61 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 			FilterExpression: aws.String("EventNamespace = :eventNamespace AND attribute_not_exists(:notDefined)"),
 		}
 
+		// Resume the scan at the end of the previous one.
+		// This processes 100 events or 1 MiB of data at maximum
+		// which is why we need to run this multiple times on the dataset.
 		scanOut, err := l.svc.Scan(c)
 		if err != nil {
 			return trace.Wrap(err)
 		}
 
-		total += *scanOut.Count
-		startKey = scanOut.LastEvaluatedKey
+		// For every item processed by this scan iteration we send an update action
+		// that adds the new date attribute.
+		for _, item := range scanOut.Items {
+			// Extract the UTC timestamp integeger of the event.
+			timestampAttribute := item[keyCreatedAt]
+			var timestampRaw int64
+			err = dynamodbattribute.Unmarshal(timestampAttribute, &timestampRaw)
+			if err != nil {
+				return trace.Wrap(err)
+			}
 
-		// processing
+			// Convert the timestamp into a date string of format `yyyy-mm-dd`.
+			timestamp := time.Unix(timestampRaw, 0)
+			date := timestamp.Format("2006-01-02")
+
+			attributes := map[string]interface{}{
+				// The name of the attribute to update.
+				":keyDate": keyDate,
+
+				// Value to set the date attribute to.
+				// TO-DO: set this properly
+				":date": date,
+			}
+
+			attributeMap, err := dynamodbattribute.MarshalMap(attributes)
+			if err != nil {
+				return trace.Wrap(err)
+			}
+
+			c := &dynamodb.UpdateItemInput{
+				TableName:                 aws.String(tableName),
+				Key:                       item,
+				ExpressionAttributeValues: attributeMap,
+				UpdateExpression:          aws.String("SET :keyDate = :date"),
+			}
+
+			// TO-DO: handle rate limiting
+			_, err = l.svc.UpdateItem(c)
+			if err != nil {
+				return trace.Wrap(err)
+			}
+		}
+
+		// Setting the startKey to the last evaluated key of the previous scan so that
+		// the next scan doesn't return processed events.
+		startKey = scanOut.LastEvaluatedKey
+		total += *scanOut.Count
 
 		log.Infof("Step 2/3: Migrated %q total events", total)
 		if startKey == nil {
