@@ -821,8 +821,8 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 		// Setting the startKey to the last evaluated key of the previous scan so that
 		// the next scan doesn't return processed events.
 		startKey = scanOut.LastEvaluatedKey
-		total += *scanOut.Count
 
+		total += *scanOut.Count
 		log.Infof("Step 2/3: Migrated %q total events", total)
 
 		// If the `LastEvaluatedKey` field is not set we have finished scanning
