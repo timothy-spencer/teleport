@@ -523,7 +523,7 @@ func daysBetween(start time.Time, end time.Time) []string {
 
 	for start.Before(end.Add(oneDay)) {
 		days = append(days, start.Format("2006-01-02"))
-		start.Add(oneDay)
+		start = start.Add(oneDay)
 	}
 
 	return days
