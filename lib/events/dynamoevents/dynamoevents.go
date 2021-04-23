@@ -44,9 +44,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Defines an updated table schema that adds the keyDate key.
-// Otherwise the same as the original schema but we have to
-// resend the full schema due to how DynamoDB works.
+// isoDateLayout is the time formatting layout used by the date attribute on events.
+const isoDateLayout = "2006-01-02"
+
+// Defines the attribute schema for the DynamoDB event table and index.
 var tableSchema = []*dynamodb.AttributeDefinition{
 	// Existing attributes pre RFD 24.
 	{
@@ -167,6 +168,7 @@ type event struct {
 	Expires        *int64 `json:"Expires,omitempty"`
 	Fields         string
 	EventNamespace string
+	Date           string
 }
 
 const (
@@ -377,6 +379,7 @@ func (l *Log) EmitAuditEvent(ctx context.Context, in events.AuditEvent) error {
 		EventNamespace: defaults.Namespace,
 		CreatedAt:      in.GetTime().Unix(),
 		Fields:         string(data),
+		Date:           in.GetTime().Format(isoDateLayout),
 	}
 	l.setExpiry(&e)
 	av, err := dynamodbattribute.MarshalMap(e)
@@ -423,6 +426,7 @@ func (l *Log) EmitAuditEventLegacy(ev events.Event, fields events.EventFields) e
 		EventNamespace: defaults.Namespace,
 		CreatedAt:      created.Unix(),
 		Fields:         string(data),
+		Date:           created.Format(isoDateLayout),
 	}
 	l.setExpiry(&e)
 	av, err := dynamodbattribute.MarshalMap(e)
@@ -563,7 +567,7 @@ func daysBetween(start time.Time, end time.Time) []string {
 	oneDay := time.Hour * time.Duration(24)
 
 	for start.Before(end.Add(oneDay)) {
-		days = append(days, start.Format("2006-01-02"))
+		days = append(days, start.Format(isoDateLayout))
 		start = start.Add(oneDay)
 	}
 
@@ -891,7 +895,7 @@ func (l *Log) migrateDateAttribute(ctx context.Context) error {
 
 			// Convert the timestamp into a date string of format `yyyy-mm-dd`.
 			timestamp := time.Unix(timestampRaw, 0)
-			date := timestamp.Format("2006-01-02")
+			date := timestamp.Format(isoDateLayout)
 
 			attributes := map[string]interface{}{
 				// The name of the attribute to update.
