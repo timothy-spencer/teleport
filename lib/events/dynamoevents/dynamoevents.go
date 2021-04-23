@@ -643,12 +643,14 @@ func (l *Log) getTableStatus(tableName string) (tableStatus, error) {
 // Invariants:
 // - The new global secondary index must not exist.
 // - This function must not be called concurrently with itself.
+// - This function must be called before the
+//   backend is considered initialized and the main Teleport process is started.
 func (l *Log) createV2GSI(tableName string) error {
 	// Defines an updated table schema that adds the keyDate key.
 	// Otherwise the same as the original schema but we have to
 	// resend the full schema due to how DynamoDB works.
 	def := []*dynamodb.AttributeDefinition{
-		// Existing attributes
+		// Existing attributes pre RFD 24.
 		{
 			AttributeName: aws.String(keySessionID),
 			AttributeType: aws.String("S"),
@@ -665,7 +667,7 @@ func (l *Log) createV2GSI(tableName string) error {
 			AttributeName: aws.String(keyCreatedAt),
 			AttributeType: aws.String("N"),
 		},
-		// New attribute
+		// New attribute in RFD 24.
 		{
 			AttributeName: aws.String(keyDate),
 			AttributeType: aws.String("S"),
@@ -707,14 +709,37 @@ func (l *Log) createV2GSI(tableName string) error {
 		},
 	}
 
-	// Sends the update request to AWS. These updates are atomic
-	// from my understanding and it is thus safe to simply send the error
-	// upwards to the caller without leaving any traces.
 	if _, err := l.svc.UpdateTable(&c); err != nil {
 		return trace.Wrap(convertError(err))
 	}
 
 	log.Infof("Step 1/3 Complete: Migrated schema and created global secondary index for table %q", tableName)
+	return nil
+}
+
+// removeV1GSI removes the pre RFD 24 global secondary index from the table.
+//
+// Invariants
+// - The pre RFD 24 global secondary index must exist.
+// - This function must not be called concurrently with itself.
+// - This may only be executed after the post RFD 24 global secondary index has been created.
+// - This may only be executed after all events have been migrated successfully with `migrateDateAttribute`.
+func (l *Log) removeV1GSI(tableName string) error {
+	c := dynamodb.UpdateTableInput{
+		TableName: aws.String(tableName),
+		GlobalSecondaryIndexUpdates: []*dynamodb.GlobalSecondaryIndexUpdate{
+			{
+				Delete: &dynamodb.DeleteGlobalSecondaryIndexAction{
+					IndexName: aws.String(indexTimeSearch),
+				},
+			},
+		},
+	}
+
+	if _, err := l.svc.UpdateTable(&c); err != nil {
+		return trace.Wrap(convertError(err))
+	}
+
 	return nil
 }
 
