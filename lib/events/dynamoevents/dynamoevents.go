@@ -331,38 +331,51 @@ func (l *Log) migrateRFD24(ctx context.Context, dataBackend backend.Backend) err
 		return trace.Wrap(err)
 	}
 
+	migrateIndices := true
+	migrateEvents := true
+
 	// Table is already up to date.
-	// TO-DO: check if we need to migrate events here
 	if !hasIndexV1 {
-		return nil
+		migrateIndices = false
+
+		_, err := dataBackend.Get(ctx, migrateRFD24FinishedKey)
+		if err == nil {
+			migrateEvents = false
+		} else if !trace.IsNotFound(err) {
+			return trace.Wrap(err)
+		}
 	}
 
-	err = l.createV2GSI()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	err = l.removeV1GSI()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	go func() {
-		err := l.migrateDateAttribute(ctx)
+	if migrateIndices {
+		err = l.createV2GSI()
 		if err != nil {
-			log.WithError(err).Error("Encountered error migrating events to RFD 24 format")
+			return trace.Wrap(err)
 		}
 
-		item := backend.Item{
-			Key:   migrateRFD24FinishedKey,
-			Value: make([]byte, 0),
-		}
-
-		_, err = dataBackend.Put(ctx, item)
+		err = l.removeV1GSI()
 		if err != nil {
-			log.WithError(err).Error("Migrated all events to RFD 24 format successfully but failed to write flag to backend.")
+			return trace.Wrap(err)
 		}
-	}()
+	}
+
+	if migrateEvents {
+		go func() {
+			err := l.migrateDateAttribute(ctx)
+			if err != nil {
+				log.WithError(err).Error("Encountered error migrating events to RFD 24 format")
+			}
+
+			item := backend.Item{
+				Key:   migrateRFD24FinishedKey,
+				Value: make([]byte, 0),
+			}
+
+			_, err = dataBackend.Put(ctx, item)
+			if err != nil {
+				log.WithError(err).Error("Migrated all events to RFD 24 format successfully but failed to write flag to backend.")
+			}
+		}()
+	}
 
 	return nil
 }
