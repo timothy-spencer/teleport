@@ -321,6 +321,8 @@ const (
 	tableStatusOK
 )
 
+var migrateRFD24FinishedKey = backend.Key("internal", "dynamoevents", "rfd_24_migration_complete")
+
 // migrateRFD24 checks if any migration actions need to be performed
 // as specified in RFD 24 and applies them as needed.
 func (l *Log) migrateRFD24(ctx context.Context, dataBackend backend.Backend) error {
@@ -349,6 +351,16 @@ func (l *Log) migrateRFD24(ctx context.Context, dataBackend backend.Backend) err
 		err := l.migrateDateAttribute(ctx)
 		if err != nil {
 			log.WithError(err).Error("Encountered error migrating events to RFD 24 format")
+		}
+
+		item := backend.Item{
+			Key:   migrateRFD24FinishedKey,
+			Value: make([]byte, 0),
+		}
+
+		_, err = dataBackend.Put(ctx, item)
+		if err != nil {
+			log.WithError(err).Error("Migrated all events to RFD 24 format successfully but failed to write flag to backend.")
 		}
 	}()
 
