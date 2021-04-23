@@ -709,7 +709,7 @@ func (l *Log) createV2GSI(tableName string) error {
 	// from my understanding and it is thus safe to simply send the error
 	// upwards to the caller without leaving any traces.
 	if _, err := l.svc.UpdateTable(&c); err != nil {
-		return trace.Wrap(err)
+		return trace.Wrap(convertError(err))
 	}
 
 	log.Infof("Step 1/3 Complete: Migrated schema and created global secondary index for table %q", tableName)
@@ -770,7 +770,7 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 		// which is why we need to run this multiple times on the dataset.
 		scanOut, err := l.svc.Scan(c)
 		if err != nil {
-			return trace.Wrap(err)
+			return trace.Wrap(convertError(err))
 		}
 
 		// For every item processed by this scan iteration we send an update action
@@ -812,7 +812,7 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 			// TO-DO: handle rate limiting
 			_, err = l.svc.UpdateItem(c)
 			if err != nil {
-				return trace.Wrap(err)
+				return trace.Wrap(convertError(err))
 			}
 		}
 
