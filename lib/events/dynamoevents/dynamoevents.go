@@ -268,6 +268,12 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 		return nil, trace.Wrap(err)
 	}
 
+	// Migrate the table according to RFD 24 if it still has the old schema.
+	err = b.migrateRFD24(ctx)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
 	// Enable continuous backups if requested.
 	if b.Config.EnableContinuousBackups {
 		if err := dynamo.SetContinuousBackups(ctx, b.svc, b.Tablename); err != nil {
@@ -311,6 +317,40 @@ const (
 	tableStatusNeedsMigration
 	tableStatusOK
 )
+
+// migrateRFD24 checks if any migration actions need to be performed
+// as specified in RFD 24 and applies them as needed.
+func (l *Log) migrateRFD24(ctx context.Context) error {
+	hasIndexV2, err := l.indexExists(l.Tablename, indexTimeSearch)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	// Table is already up to date.
+	// TO-DO: check if we need to migrate events here
+	if hasIndexV2 {
+		return nil
+	}
+
+	err = l.removeV1GSI()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	err = l.createV2GSI()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	go func() {
+		err := l.migrateDateAttribute(ctx)
+		if err != nil {
+			log.WithError(err).Error("Encounted error migrating events to RFD 24 format")
+		}
+	}()
+
+	return nil
+}
 
 // EmitAuditEvent emits audit event
 func (l *Log) EmitAuditEvent(ctx context.Context, in events.AuditEvent) error {
@@ -684,6 +724,24 @@ func (l *Log) getTableStatus(tableName string) (tableStatus, error) {
 	return tableStatusOK, nil
 }
 
+// indexExists checks if a given index exists on a given table.
+func (l *Log) indexExists(tableName, indexName string) (bool, error) {
+	tableDescription, err := l.svc.DescribeTable(&dynamodb.DescribeTableInput{
+		TableName: aws.String(tableName),
+	})
+	if err != nil {
+		return false, trace.Wrap(convertError(err))
+	}
+
+	for _, gsi := range tableDescription.Table.GlobalSecondaryIndexes {
+		if *gsi.IndexName == indexName {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // createV2GSI creates the new global secondary Index and updates
 // the schema to add a string key `date`.
 //
@@ -695,7 +753,7 @@ func (l *Log) getTableStatus(tableName string) (tableStatus, error) {
 // - This function must not be called concurrently with itself.
 // - This function must be called before the
 //   backend is considered initialized and the main Teleport process is started.
-func (l *Log) createV2GSI(tableName string) error {
+func (l *Log) createV2GSI() error {
 	provisionedThroughput := dynamodb.ProvisionedThroughput{
 		ReadCapacityUnits:  aws.Int64(l.ReadCapacityUnits),
 		WriteCapacityUnits: aws.Int64(l.WriteCapacityUnits),
@@ -705,7 +763,7 @@ func (l *Log) createV2GSI(tableName string) error {
 	// This update sends an updated schema and an child event
 	// to create the new global secondary index.
 	c := dynamodb.UpdateTableInput{
-		TableName:            aws.String(tableName),
+		TableName:            aws.String(l.Tablename),
 		AttributeDefinitions: tableSchema,
 		GlobalSecondaryIndexUpdates: []*dynamodb.GlobalSecondaryIndexUpdate{
 			{
@@ -744,10 +802,9 @@ func (l *Log) createV2GSI(tableName string) error {
 // - The pre RFD 24 global secondary index must exist.
 // - This function must not be called concurrently with itself.
 // - This may only be executed after the post RFD 24 global secondary index has been created.
-// - This may only be executed after all events have been migrated successfully with `migrateDateAttribute`.
-func (l *Log) removeV1GSI(tableName string) error {
+func (l *Log) removeV1GSI() error {
 	c := dynamodb.UpdateTableInput{
-		TableName: aws.String(tableName),
+		TableName: aws.String(l.Tablename),
 		GlobalSecondaryIndexUpdates: []*dynamodb.GlobalSecondaryIndexUpdate{
 			{
 				Delete: &dynamodb.DeleteGlobalSecondaryIndexAction{
@@ -776,7 +833,7 @@ func (l *Log) removeV1GSI(tableName string) error {
 // Invariants:
 // - This function must be called after `createV2GSI` has completed successfully on the table.
 // - This function must not be called concurrently with itself.
-func (l *Log) migrateDateAttribute(tableName string) error {
+func (l *Log) migrateDateAttribute(ctx context.Context) error {
 	var total int64 = 0
 	var startKey map[string]*dynamodb.AttributeValue
 
@@ -803,14 +860,11 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 			// for any missed events after an appropriate grace period which is far worse.
 			ConsistentRead:            aws.Bool(true),
 			ExpressionAttributeValues: attributeMap,
-			// Use the old global secondary index as a base for scanning.
-			// This is somehow faster, won't question why.
-			IndexName: aws.String(indexTimeSearch),
 			// 100 seems like a good batch size that compromises
 			// between memory usage and fetch frequency.
 			// The limiting factor in terms of speed is the update ratelimit and not this.
 			Limit:     aws.Int64(100),
-			TableName: aws.String(tableName),
+			TableName: aws.String(l.Tablename),
 			// Only return events with a matching namespace and without the `date` attribute.
 			FilterExpression: aws.String("EventNamespace = :eventNamespace AND attribute_not_exists(:notDefined)"),
 		}
@@ -852,7 +906,7 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 			}
 
 			c := &dynamodb.UpdateItemInput{
-				TableName:                 aws.String(tableName),
+				TableName:                 aws.String(l.Tablename),
 				Key:                       item,
 				ExpressionAttributeValues: attributeMap,
 				UpdateExpression:          aws.String("SET :keyDate = :date"),
@@ -861,6 +915,10 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 			_, err = l.svc.UpdateItem(c)
 			if err != nil {
 				return trace.Wrap(convertError(err))
+			}
+
+			if err := ctx.Err(); err != nil {
+				return trace.Wrap(err)
 			}
 		}
 
@@ -919,7 +977,7 @@ func (l *Log) createTable(tableName string) error {
 	if err == nil {
 		log.Infof("Table %q has been created", tableName)
 	}
-	if err := l.createV2GSI(tableName); err != nil {
+	if err := l.createV2GSI(); err != nil {
 		return trace.Wrap(err)
 	}
 	return trace.Wrap(err)
