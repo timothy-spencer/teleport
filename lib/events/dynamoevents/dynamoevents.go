@@ -918,6 +918,9 @@ func (l *Log) createTable(tableName string) error {
 	if err == nil {
 		log.Infof("Table %q has been created", tableName)
 	}
+	if err := l.createV2GSI(tableName); err != nil {
+		return trace.Wrap(err)
+	}
 	return trace.Wrap(err)
 }
 
