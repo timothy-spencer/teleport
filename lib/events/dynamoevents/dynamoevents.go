@@ -516,6 +516,19 @@ func (l *Log) GetSessionEvents(namespace string, sid session.ID, after int, inlc
 	return values, nil
 }
 
+// daysBetween returns a list of all dates between `start` and `end` in the format `yyyy-mm-dd`.
+func daysBetween(start time.Time, end time.Time) []string {
+	var days []string
+	oneDay := time.Hour * time.Duration(24)
+
+	for start.Before(end.Add(oneDay)) {
+		days = append(days, start.Format("2006-01-02"))
+		start.Add(oneDay)
+	}
+
+	return days
+}
+
 // SearchEvents is a flexible way to find  The format of a query string
 // depends on the implementing backend. A recommended format is urlencoded
 // (good enough for Lucene/Solr)
@@ -537,71 +550,79 @@ func (l *Log) SearchEvents(fromUTC, toUTC time.Time, filter string, limit int) (
 	doFilter := len(eventFilter) > 0
 
 	var values []events.EventFields
-	query := "EventNamespace = :eventNamespace AND CreatedAt BETWEEN :start and :end"
-	attributes := map[string]interface{}{
-		":eventNamespace": defaults.Namespace,
-		":start":          fromUTC.Unix(),
-		":end":            toUTC.Unix(),
-	}
-	attributeValues, err := dynamodbattribute.MarshalMap(attributes)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
+	dates := daysBetween(fromUTC, toUTC)
+	query := "Date = :date AND CreatedAt BETWEEN :start and :end"
 
-	var lastEvaluatedKey map[string]*dynamodb.AttributeValue
 	var total int
 
-	// Because the maximum size of the dynamo db response size is 900K according to documentation,
-	// we arbitrary limit the total size to 100MB to prevent runaway loops.
-	for pageCount := 0; pageCount < 100; pageCount++ {
-		// TO-DO: Update query to work with the next index.
-		input := dynamodb.QueryInput{
-			KeyConditionExpression:    aws.String(query),
-			TableName:                 aws.String(l.Tablename),
-			ExpressionAttributeValues: attributeValues,
-			IndexName:                 aws.String(indexTimeSearchV2),
-			ExclusiveStartKey:         lastEvaluatedKey,
+	for _, date := range dates {
+		if limit > 0 && total >= limit {
+			break
 		}
-		start := time.Now()
-		out, err := l.svc.Query(&input)
+
+		var lastEvaluatedKey map[string]*dynamodb.AttributeValue
+		attributes := map[string]interface{}{
+			":date":  date,
+			":start": fromUTC.Unix(),
+			":end":   toUTC.Unix(),
+		}
+
+		attributeValues, err := dynamodbattribute.MarshalMap(attributes)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
-		g.WithFields(log.Fields{"duration": time.Since(start), "items": len(out.Items)}).Debugf("Query completed.")
 
-		for _, item := range out.Items {
-			var e event
-			if err := dynamodbattribute.UnmarshalMap(item, &e); err != nil {
-				return nil, trace.BadParameter("failed to unmarshal event for %v", err)
+		// Because the maximum size of the dynamo db response size is 900K according to documentation,
+		// we arbitrary limit the total size to 100MB to prevent runaway loops.
+		for pageCount := 0; pageCount < 100; pageCount++ {
+			input := dynamodb.QueryInput{
+				KeyConditionExpression:    aws.String(query),
+				TableName:                 aws.String(l.Tablename),
+				ExpressionAttributeValues: attributeValues,
+				IndexName:                 aws.String(indexTimeSearchV2),
+				ExclusiveStartKey:         lastEvaluatedKey,
 			}
-			var fields events.EventFields
-			data := []byte(e.Fields)
-			if err := json.Unmarshal(data, &fields); err != nil {
-				return nil, trace.BadParameter("failed to unmarshal event %v", err)
+			start := time.Now()
+			out, err := l.svc.Query(&input)
+			if err != nil {
+				return nil, trace.Wrap(err)
 			}
-			var accepted bool
-			for i := range eventFilter {
-				if fields.GetString(events.EventType) == eventFilter[i] {
-					accepted = true
-					break
+			g.WithFields(log.Fields{"duration": time.Since(start), "items": len(out.Items)}).Debugf("Query completed.")
+
+			for _, item := range out.Items {
+				var e event
+				if err := dynamodbattribute.UnmarshalMap(item, &e); err != nil {
+					return nil, trace.BadParameter("failed to unmarshal event for %v", err)
+				}
+				var fields events.EventFields
+				data := []byte(e.Fields)
+				if err := json.Unmarshal(data, &fields); err != nil {
+					return nil, trace.BadParameter("failed to unmarshal event %v", err)
+				}
+				var accepted bool
+				for i := range eventFilter {
+					if fields.GetString(events.EventType) == eventFilter[i] {
+						accepted = true
+						break
+					}
+				}
+				if accepted || !doFilter {
+					values = append(values, fields)
+					total++
+					if limit > 0 && total >= limit {
+						break
+					}
 				}
 			}
-			if accepted || !doFilter {
-				values = append(values, fields)
-				total++
-				if limit > 0 && total >= limit {
-					break
-				}
-			}
-		}
 
-		// AWS returns a `lastEvaluatedKey` in case the response is truncated, i.e. needs to be fetched with
-		// multiple requests. According to their documentation, the final response is signaled by not setting
-		// this value - therefore we use it as our break condition.
-		lastEvaluatedKey = out.LastEvaluatedKey
-		if len(lastEvaluatedKey) == 0 {
-			sort.Sort(events.ByTimeAndIndex(values))
-			return values, nil
+			// AWS returns a `lastEvaluatedKey` in case the response is truncated, i.e. needs to be fetched with
+			// multiple requests. According to their documentation, the final response is signaled by not setting
+			// this value - therefore we use it as our break condition.
+			lastEvaluatedKey = out.LastEvaluatedKey
+			if len(lastEvaluatedKey) == 0 {
+				sort.Sort(events.ByTimeAndIndex(values))
+				return values, nil
+			}
 		}
 	}
 
