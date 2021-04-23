@@ -322,23 +322,23 @@ const (
 // migrateRFD24 checks if any migration actions need to be performed
 // as specified in RFD 24 and applies them as needed.
 func (l *Log) migrateRFD24(ctx context.Context, dataBackend backend.Backend) error {
-	hasIndexV2, err := l.indexExists(l.Tablename, indexTimeSearch)
+	hasIndexV1, err := l.indexExists(l.Tablename, indexTimeSearch)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	// Table is already up to date.
 	// TO-DO: check if we need to migrate events here
-	if hasIndexV2 {
+	if !hasIndexV1 {
 		return nil
 	}
 
-	err = l.removeV1GSI()
+	err = l.createV2GSI()
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	err = l.createV2GSI()
+	err = l.removeV1GSI()
 	if err != nil {
 		return trace.Wrap(err)
 	}
