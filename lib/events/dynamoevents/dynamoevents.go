@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/backend/dynamo"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
@@ -210,7 +211,7 @@ const (
 
 // New returns new instance of DynamoDB backend.
 // It's an implementation of backend API's NewFunc
-func New(ctx context.Context, cfg Config) (*Log, error) {
+func New(ctx context.Context, cfg Config, backend backend.Backend) (*Log, error) {
 	l := log.WithFields(log.Fields{
 		trace.Component: teleport.Component(teleport.ComponentDynamoDB),
 	})
@@ -269,7 +270,7 @@ func New(ctx context.Context, cfg Config) (*Log, error) {
 	}
 
 	// Migrate the table according to RFD 24 if it still has the old schema.
-	err = b.migrateRFD24(ctx)
+	err = b.migrateRFD24(ctx, backend)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -320,7 +321,7 @@ const (
 
 // migrateRFD24 checks if any migration actions need to be performed
 // as specified in RFD 24 and applies them as needed.
-func (l *Log) migrateRFD24(ctx context.Context) error {
+func (l *Log) migrateRFD24(ctx context.Context, dataBackend backend.Backend) error {
 	hasIndexV2, err := l.indexExists(l.Tablename, indexTimeSearch)
 	if err != nil {
 		return trace.Wrap(err)
