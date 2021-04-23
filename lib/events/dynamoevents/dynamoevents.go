@@ -777,8 +777,8 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 		c := &dynamodb.ScanInput{
 			ExclusiveStartKey: startKey,
 			// Without consistent reads we may miss events as DynamoDB does not
-			// specify a synchronisation grace period. This makes the scan operation
-			// slightly slower but the other alternative is scanning a second time
+			// specify a sufficiently short synchronisation grace period we can rely on instead.
+			// This makes the scan operation slightly slower but the other alternative is scanning a second time
 			// for any missed events after an appropriate grace period which is far worse.
 			ConsistentRead:            aws.Bool(true),
 			ExpressionAttributeValues: attributeMap,
