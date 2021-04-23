@@ -793,7 +793,6 @@ func (l *Log) migrateDateAttribute(tableName string) error {
 				":keyDate": keyDate,
 
 				// Value to set the date attribute to.
-				// TO-DO: set this properly
 				":date": date,
 			}
 
