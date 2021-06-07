@@ -8,7 +8,7 @@ metadata:
 spec:
   allow:
     kubernetes_groups:
-    - '{{internal.kubernetes_groups}}'
+    # - '{{internal.kubernetes_groups}}'
     logins:
     - '{{internal.logins}}'
     - root
