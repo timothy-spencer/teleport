@@ -16,12 +16,18 @@ spec:
   redirect_url: {{ .Values.githubRedirectURL }}
   # Mapping of org/team memberships onto allowed logins and roles
   teams_to_logins:
-    - organization: octocats # Github organization name
-      team: admins # Github team name within that organization
-      # Allowed logins for users in this org/team
-      logins:
-        - access
+    {{- range .Values.githubTeamstologins }}
+    - logins:
+        {{- range .logins }}
+        - {{ . }}
+        {{- end }}
+      organization: {{ .organization }} # Github organization name
+      team: {{ .team }} # Github team name within that organization
       # List of Kubernetes groups this Github team is allowed to connect to
       # (see Kubernetes integration for more information)
-      kubernetes_groups: ["system:masters"]
+      kubernetes_system:
+        {{ - range .k8sSystem }}
+        - {{ . }}
+        {{- end }}
+    {{- end }}
 {{- end -}}
