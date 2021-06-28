@@ -296,6 +296,37 @@
             "$id": "#/properties/tolerations",
             "type": "array",
             "default": []
-        }
+        },
+        "authenticationType": {
+            "$id": "#/properties/authenticationType",
+            "type": "string",
+            "default": ""
+        },
+        "githubClientID": {
+            "$id": "#/properties/githubClientID",
+            "type": "string",
+            "default": ""
+        },
+        "githubClientSecret": {
+            "$id": "#/properties/githubClientSecret",
+            "type": "string",
+            "default": ""
+        },
+        "githubRedirectURL": {
+            "$id": "#/properties/githubRedirectURL",
+            "type": "string",
+            "default": ""
+        },
+        "githubTeamsToLogins": {
+            "$id": "#/properties/githubTeamstologins",
+            "type": "object",
+            "required": [
+                "logins"
+            ],
+            "properties": {
+                "organization"
+            }
+        },
+        
     }
 }
